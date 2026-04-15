@@ -1,0 +1,45 @@
+{
+  "cookies": [
+    {
+      "name": "token",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VybW1AeW9wbWFpbC5jb20iLCJpYXQiOjE3NzYyMjY0MjUsImV4cCI6MTc3NjIzMzYyNX0.SUvGXqgNbLh_7b3r0T1B2yhFG2lIEbXnPtRsj_GMxJE",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1776312825,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "refresh_token",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VybW1AeW9wbWFpbC5jb20iLCJpYXQiOjE3NzYyMjY0MjUsImV4cCI6MTc3NjMxMjgyNX0.qSdpQqfX7CcmypUJvkcDdOasnD5i1QG00cL3FTCtPWQ",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1776831225,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "detailUser",
+      "value": "{\"fullname\":\"Noordin\",\"email\":\"usermm@yopmail.com\",\"lembaga\":null,\"phone_number\":\"085641231132\",\"roles\":[{\"role_name\":\"Majelis Masyayikh\",\"role_code\":\"MM\",\"role_id\":\"2d61c4c5-be66-419c-ba66-36695babb145\"}],\"nomor_statistik\":null,\"lembaga_address\":null,\"student_male\":0,\"student_female\":0,\"total_staff\":0,\"profile_image_url\":null,\"certificate_url\":null,\"certificate_name\":null,\"type_lembaga\":null,\"institution_id\":null,\"user_id\":\"924df8d2-e9d4-43ef-b488-0e33376827bc\",\"first_name\":\"Noordin\",\"last_name\":\"Muhammad\"}",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1776312825,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "role",
+      "value": "{\"role_name\":\"Majelis Masyayikh\",\"role_code\":\"MM\",\"role_id\":\"2d61c4c5-be66-419c-ba66-36695babb145\"}",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1776312825,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}

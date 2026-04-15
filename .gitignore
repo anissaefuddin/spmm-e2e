@@ -1,0 +1,10 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+.env.test
+
+# Auth state files contain real tokens - never commit
+auth/admin-auth.json
+auth/dm-auth.json
+auth/sk-auth.json

@@ -1,0 +1,45 @@
+{
+  "cookies": [
+    {
+      "name": "token",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkaWtkYXNtZW4xQHlvcG1haWwuY29tIiwiaWF0IjoxNzc2MjI2NDI1LCJleHAiOjE3NzYyMzM2MjV9.hyHT3fLfjY8FUabsyQ6Cdz4lbia1IIu6Mib_LFKEybk",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1776312825,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "refresh_token",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJkaWtkYXNtZW4xQHlvcG1haWwuY29tIiwiaWF0IjoxNzc2MjI2NDI1LCJleHAiOjE3NzYzMTI4MjV9.RqRMnoiNSNhw3SVH-gOSFnn7Sbm1SBPBhotWptoAqw0",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1776831225,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "detailUser",
+      "value": "{\"fullname\":\"Dikdasmen #1\",\"email\":\"dikdasmen1@yopmail.com\",\"lembaga\":\"PDF ULya\",\"phone_number\":\"081111111111\",\"roles\":[{\"role_name\":\"DIKDASMEN\",\"role_code\":\"DD\",\"role_id\":\"da993979-5e93-4255-a37c-f859829e13c9\"}],\"nomor_statistik\":\"\",\"lembaga_address\":null,\"student_male\":0,\"student_female\":0,\"total_staff\":0,\"profile_image_url\":null,\"certificate_url\":null,\"certificate_name\":null,\"type_lembaga\":null,\"institution_id\":\"240971\",\"user_id\":\"4e2f05ac-b5ee-4e54-a5b7-065d9b3d66af\",\"first_name\":\"Dikdasmen\",\"last_name\":\"#1\"}",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1776312825,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "role",
+      "value": "{\"role_name\":\"DIKDASMEN\",\"role_code\":\"DD\",\"role_id\":\"da993979-5e93-4255-a37c-f859829e13c9\"}",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1776312825,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}
