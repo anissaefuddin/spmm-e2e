@@ -194,7 +194,7 @@ export const STANDARD_4_SARPRAS = {
 // ---------------------------------------------------------------------------
 export const PRAVISITASI_ASESOR_1 = {
   /** Catatan untuk daftar siswa */
-  pravisit_daftarSiswa_catatan: 'Daftar siswa lengkap, terverifikasi dari DAPODIK.',
+  // pravisit_daftarSiswa_catatan: 'Daftar siswa lengkap, terverifikasi dari DAPODIK.',
   /** Penilaian kualifikasi kepala: Memenuhi / Tidak Memenuhi */
   pravisit_kualifikasiKepala_memenuhi: 'Memenuhi',
   pravisit_kualifikasiPendidik_memenuhi: 'Memenuhi',
@@ -249,6 +249,27 @@ export const VISITASI_SCORES_MUMTAZ = {
   std4_indicator_1: { skor: '91', bobot: '9' },
   std4_indicator_2: { skor: '89', bobot: '8' },
   std4_indicator_3: { skor: '90', bobot: '8' },
+} as const;
+
+/**
+ * Visitasi row-level field values (Steps 20–27 custom-formlist rows).
+ *
+ * Each row in the visitasi custom-formlist has this set of fields that the
+ * assessor must fill.  Values are deliberately chosen to pass validation:
+ *   • STATUS  → "Memenuhi" (first real business value, never "-")
+ *   • SKOR    → "4" (highest available rating)
+ *   • textareas → descriptive Mumtaz-level content
+ */
+export const VISITASI_ROW_DATA = {
+  telaah_dokumen:              'Dokumen lengkap dan sesuai',
+  wawancara:                   'Hasil wawancara sesuai standar',
+  observasi:                   'Observasi menunjukkan implementasi baik',
+  status:                      'Memenuhi',
+  alasan:                      'Semua indikator terpenuhi',
+  skor:                        '4',
+  komponen_terpenuhi:          'Semua komponen terpenuhi',
+  komponen_tidak_terpenuhi:    '-',
+  saran:                       'Pertahankan kualitas',
 } as const;
 
 /** Score set that yields totalnilai in [80, 89] → Jayyid */

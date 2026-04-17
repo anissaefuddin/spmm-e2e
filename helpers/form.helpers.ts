@@ -63,10 +63,100 @@ async function fillField(page: Page, field: FormFieldDef): Promise<void> {
     }
 
     case 'textarea': {
-      const textarea = page.locator(`textarea[name="${field.name}"]`).first();
-      await textarea.waitFor({ state: 'visible', timeout: 8_000 });
-      await textarea.clear();
+      console.log(`    fillField [textarea] "${field.name}"`);
+
+      // Detection runs three strategies in order; the first one that resolves to
+      // a visible, enabled element wins.  This avoids hard-coding attribute names
+      // that the rendered component may omit.
+      //
+      // Strategy 1 — name attribute (fastest; works when DynamicForm passes name)
+      // Strategy 2 — label-based container lookup (works when name is absent)
+      // Strategy 3 — last visible textarea on the page (positional fallback)
+
+      let textarea = page.locator(`textarea[name="${field.name}"]`).first();
+      const nameMatch = await textarea.isVisible({ timeout: 2_000 }).catch(() => false);
+      console.log(`      strategy 1 (name="${field.name}"): ${nameMatch ? '✓' : '✗'}`);
+
+      if (!nameMatch) {
+        // Strategy 2: find a parent div whose label text contains the field name,
+        // then pick the first editable element inside it.
+        // Using a RegExp so partial / case-insensitive matches work for label text
+        // that may include asterisks, colons, or localised translations.
+        const labelPattern = new RegExp(field.name.replace(/_/g, '[_ ]'), 'i');
+        const group = page.locator('div').filter({
+          has: page.locator('label').filter({ hasText: labelPattern }),
+        }).last();
+
+        const groupVisible = await group.isVisible({ timeout: 2_000 }).catch(() => false);
+        console.log(`      strategy 2 (label~/${labelPattern.source}/i): ${groupVisible ? '✓' : '✗'}`);
+
+        if (groupVisible) {
+          textarea = group
+            .locator('textarea, [contenteditable="true"]')
+            .first();
+        }
+      }
+
+      // Strategy 3: fall back to the last visible textarea on the page.
+      // "last" is preferred over "first" because the active / focused field in a
+      // multi-section form is usually appended later in the DOM.
+      const resolvedVisible = await textarea.isVisible({ timeout: 1_000 }).catch(() => false);
+      if (!resolvedVisible) {
+        console.log(`      strategy 3 (last visible textarea): attempting`);
+        textarea = page.locator('textarea:visible').last();
+      }
+
+      const finalVisible = await textarea.isVisible({ timeout: 3_000 }).catch(() => false);
+      if (!finalVisible) {
+        // Snapshot what IS on the page so the test report tells us what to target
+        const allTextareas = await page.locator('textarea').all();
+        const textareaInfo = await Promise.all(allTextareas.map(async (ta) => {
+          const name = await ta.getAttribute('name') ?? '';
+          const id   = await ta.getAttribute('id') ?? '';
+          const plc  = await ta.getAttribute('placeholder') ?? '';
+          const visible = await ta.isVisible().catch(() => false);
+          return `name="${name}" id="${id}" placeholder="${plc}" visible=${visible}`;
+        }));
+
+        const allInputs = await page.locator('input[type="text"], input:not([type])').all();
+        const inputInfo = await Promise.all(allInputs.slice(0, 30).map(async (i) => {
+          const name = await i.getAttribute('name') ?? '';
+          const id   = await i.getAttribute('id') ?? '';
+          const visible = await i.isVisible().catch(() => false);
+          return `name="${name}" id="${id}" visible=${visible}`;
+        }));
+
+        const allLabels = (await page.locator('label').allTextContents())
+          .map((s) => s.trim()).filter(Boolean).slice(0, 40);
+
+        const ceCount = await page.locator('[contenteditable="true"]').count();
+
+        throw new Error(
+          `fillField [textarea] "${field.name}": element not found after three strategies.\n\n` +
+          `── DOM SNAPSHOT ────────────────────────────────────────────────\n` +
+          `Page URL: ${page.url()}\n` +
+          `<textarea> elements (${allTextareas.length}):\n` +
+          (textareaInfo.length ? textareaInfo.map((s) => `  • ${s}`).join('\n') : '  (none)') + `\n` +
+          `<input type="text"> elements (showing first 30 of ${allInputs.length}):\n` +
+          (inputInfo.length ? inputInfo.map((s) => `  • ${s}`).join('\n') : '  (none)') + `\n` +
+          `[contenteditable="true"] elements: ${ceCount}\n` +
+          `<label> texts (first 40): ${allLabels.map((l) => `"${l}"`).join(', ')}\n` +
+          `────────────────────────────────────────────────────────────────\n\n` +
+          `Likely causes:\n` +
+          `  • Field "${field.name}" is named differently in the rendered form\n` +
+          `    (compare the names listed above and update the test constant).\n` +
+          `  • The page has not finished loading the form schema — add a wait\n` +
+          `    on the choosetask response or a known field's label before fillDynamicForm.\n` +
+          `  • The form uses a rich-text editor instead of <textarea> (count of\n` +
+          `    contenteditable nodes shown above).`,
+        );
+      }
+
+      await textarea.waitFor({ state: 'visible', timeout: 10_000 });
+      await textarea.scrollIntoViewIfNeeded();
+      await textarea.click();
       await textarea.fill(value[0]);
+      console.log(`      ✓ filled with "${value[0].slice(0, 40)}${value[0].length > 40 ? '…' : ''}"`);
       break;
     }
 

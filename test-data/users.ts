@@ -15,6 +15,7 @@ export type RoleKey =
   | 'ta'
   | 'mm'
   | 'asdk'
+  | 'asdk2'
   | 'mha'
   | 'dk'
   | 'tas'
@@ -90,7 +91,7 @@ export const TEST_USERS: Record<RoleKey, TestUser> = {
     envPasswordKey: 'TEST_MM_PASSWORD',
   },
 
-  /** Asessor Dikdasmen — SPME DIKDASMEN only */
+  /** Asessor Dikdasmen — SPME DIKDASMEN only (first assessor / Asesor 1) */
   asdk: {
     email: process.env.TEST_ASDK_EMAIL || 'asesorddm1@yopmail.com',
     password: process.env.TEST_ASDK_PASSWORD || 'Password123!',
@@ -99,6 +100,17 @@ export const TEST_USERS: Record<RoleKey, TestUser> = {
     authStateFile: 'asdk-auth.json',
     envEmailKey: 'TEST_ASDK_EMAIL',
     envPasswordKey: 'TEST_ASDK_PASSWORD',
+  },
+
+  /** Asessor Dikdasmen #2 — second assessor (Asesor 2) for paired review workflows */
+  asdk2: {
+    email: process.env.TEST_ASDK2_EMAIL || 'asesorddm2@yopmail.com',
+    password: process.env.TEST_ASDK2_PASSWORD || 'Password123!',
+    role_code: 'ASDK',
+    role_name: 'Asessor Dikdasmen',
+    authStateFile: 'asdk2-auth.json',
+    envEmailKey: 'TEST_ASDK2_EMAIL',
+    envPasswordKey: 'TEST_ASDK2_PASSWORD',
   },
 
   /** Ma'had Aly — SPME Mahad Aly only */

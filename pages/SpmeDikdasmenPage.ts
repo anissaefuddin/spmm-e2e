@@ -336,7 +336,26 @@ export class SpmeDikdasmenPage extends SubmissionPage {
 
   /**
    * Fill the assessor assignment form (Step 9 — SK role).
-   * Selects two different assessors from the dropdown and sets visitasi dates.
+   *
+   * The assessor fields are custom dropdown buttons — NOT native <select> or
+   * [role="combobox"].  Each field renders as:
+   *
+   *   <label>Assesor 1 *</label>
+   *   <div role="button" aria-haspopup="true">…current value…</div>
+   *
+   * After the button is clicked, a menu appears in the document root:
+   *   [role="menu"] | div[role="listbox"]
+   *
+   * Strategy:
+   *   1. Wait for "assesor/asesor" text so the async assessor list has loaded.
+   *   2. Find all label elements whose text contains "assesor/asesor".
+   *      Each such label is the anchor for one assessor field group.
+   *   3. Within each group's parent container, locate the [role="button"] trigger.
+   *   4. Click to open, wait for the menu, click the matching option.
+   *   5. Date inputs: label-based container lookup with positional fallback.
+   *
+   * Every intermediate state is logged — failures name the exact element and
+   * available menu items so the cause is clear without a headed run.
    */
   async fillAssessorAssignment(
     asesor1Name: string,
@@ -344,37 +363,264 @@ export class SpmeDikdasmenPage extends SubmissionPage {
     tanggalPravisitasi: string,
     tanggalVisitasi: string,
   ): Promise<void> {
-    // Asesor 1 selector
-    const asesor1Label = this.page.locator('label').filter({ hasText: /Asesor.*1|Asesor Pertama/i }).first();
-    const asesor1Container = asesor1Label.locator('~ *').first();
-    await asesor1Container.click();
-    await this.page.waitForTimeout(300);
-    await this.page.getByText(asesor1Name, { exact: false }).first().click();
-    await this.page.keyboard.press('Escape');
-    await this.page.waitForTimeout(200);
 
-    // Asesor 2 selector
-    const asesor2Label = this.page.locator('label').filter({ hasText: /Asesor.*2|Asesor Kedua/i }).first();
-    const asesor2Container = asesor2Label.locator('~ *').first();
-    await asesor2Container.click();
-    await this.page.waitForTimeout(300);
-    await this.page.getByText(asesor2Name, { exact: false }).first().click();
-    await this.page.keyboard.press('Escape');
-    await this.page.waitForTimeout(200);
+    // ── 1. Wait for async assessor list to render ─────────────────────────────
+    // The form fetches available assessors from the API after the task loads.
+    // Blocking here on any "assesor" text prevents races with empty skeletons.
+    // Note: the app spells it with double-s ("Assesor") — /asses+or/i covers both.
+    await this.page.waitForSelector('text=/asses*or/i', { timeout: 15_000 });
 
-    // Tanggal Pravisitasi
-    const pravisitInput = this.page
-      .locator(`input[name*="pravisitasi"], input[name*="Pravisitasi"]`)
-      .first();
-    await pravisitInput.fill(tanggalPravisitasi);
-    await this.page.keyboard.press('Tab');
+    // ── 2. Debug snapshot ─────────────────────────────────────────────────────
+    const allLabels = await this.page.locator('label').allTextContents();
+    console.log(
+      `    [fillAssessorAssignment] all labels (${allLabels.length}):`,
+      allLabels.map((l) => `"${l.trim()}"`).join(', '),
+    );
 
-    // Tanggal Visitasi
-    const visitasiInput = this.page
-      .locator(`input[name*="visitasi"], input[name*="Visitasi"]`)
-      .first();
-    await visitasiInput.fill(tanggalVisitasi);
-    await this.page.keyboard.press('Tab');
+    // Locate every label whose text contains "assesor" or "asesor"
+    const asesorLabels = this.page.locator('label').filter({ hasText: /asses*or/i });
+    const asesorLabelCount = await asesorLabels.count();
+    console.log(`    [fillAssessorAssignment] assessor label elements found: ${asesorLabelCount}`);
+
+    if (asesorLabelCount < 2) {
+      const formHtml = await this.page.locator('form, [class*="form"], main').first()
+        .evaluate((el) => el.outerHTML.slice(0, 3_000))
+        .catch(() => '(could not read form HTML)');
+      throw new Error(
+        `[fillAssessorAssignment] Expected ≥ 2 labels matching /asses*or/i but found ${asesorLabelCount}.\n` +
+        `All labels: ${allLabels.map((l) => `"${l.trim()}"`).join(', ')}\n` +
+        `Form HTML (first 3 000 chars):\n${formHtml}`,
+      );
+    }
+
+    // ── 3. Helper — open a custom dropdown button and pick an option ──────────
+    const pickFromButtonDropdown = async (
+      groupIndex: number,
+      optionText: string,
+    ): Promise<void> => {
+      console.log(`    [fillAssessorAssignment] group[${groupIndex}] → "${optionText}"`);
+
+      // The label's immediate parent (or nearest ancestor that also contains the
+      // trigger button) is our group container.  We walk up via .last() filter to
+      // get the tightest wrapping div that has BOTH the matching label AND a button.
+      const label = asesorLabels.nth(groupIndex);
+      const labelText = (await label.textContent() ?? '').trim();
+      console.log(`      label text: "${labelText}"`);
+
+      // Build group: innermost div that contains this specific label AND a [role="button"]
+      const group = this.page.locator('div').filter({
+        has: this.page.locator('label').filter({ hasText: labelText }),
+      }).filter({
+        has: this.page.locator('[role="button"]'),
+      }).last();
+
+      const groupVisible = await group.isVisible({ timeout: 5_000 }).catch(() => false);
+      if (!groupVisible) {
+        throw new Error(
+          `[fillAssessorAssignment] group[${groupIndex}]: ` +
+          `no div with label "${labelText}" + [role="button"] found. ` +
+          `Check that the dropdown trigger uses role="button".`,
+        );
+      }
+
+      // ── a) Native <select> inside group (safeguard for layout changes) ──────
+      const nativeSel = group.locator('select');
+      if (await nativeSel.count() > 0 && await nativeSel.isVisible({ timeout: 500 }).catch(() => false)) {
+        const opts = await nativeSel.first().locator('option').all();
+        for (const opt of opts) {
+          const text = (await opt.textContent() ?? '').trim();
+          if (text.toLowerCase().includes(optionText.toLowerCase())) {
+            await nativeSel.first().selectOption({ label: text });
+            console.log(`      ↳ native select[${groupIndex}] → "${text}"`);
+            return;
+          }
+        }
+      }
+
+      // ── b) Custom [role="button"] trigger ────────────────────────────────────
+      const triggerBtn = group.locator('[role="button"]').first();
+      const btnCount = await triggerBtn.count();
+      if (btnCount === 0) {
+        throw new Error(
+          `[fillAssessorAssignment] group[${groupIndex}] "${labelText}": ` +
+          `[role="button"] not found inside group. ` +
+          `All labels: ${allLabels.map((l) => `"${l.trim()}"`).join(', ')}`,
+        );
+      }
+
+      await triggerBtn.waitFor({ state: 'visible', timeout: 8_000 });
+      const triggerText = (await triggerBtn.textContent() ?? '').trim();
+      console.log(`      trigger button current text: "${triggerText}"`);
+
+      // ── c) Click button, then locate the ONE visible menu ─────────────────────
+      // Multiple [role="menu"] elements can coexist in the DOM (one per dropdown
+      // field, pre-rendered but hidden).  Selecting `.first()` grabs the first in
+      // DOM order which is almost certainly hidden.  Instead we click the button
+      // first, then query only the menu that became visible as a result.
+      await triggerBtn.click();
+      await this.page.waitForTimeout(400);
+
+      // :visible pseudo-class matches only elements with non-zero bounding boxes
+      // and no display:none/visibility:hidden ancestor.  Using it here means we
+      // always get the menu that the browser actually rendered open — regardless
+      // of how many sibling menus are present in the DOM tree.
+      const visibleMenu = this.page.locator('[role="menu"]:visible').last();
+      await visibleMenu.waitFor({ state: 'visible', timeout: 8_000 });
+
+      // ── d) Collect all option elements and their raw text ────────────────────
+      const optionEls = await visibleMenu
+        .locator('[role="menuitem"], [role="option"], li')
+        .all();
+
+      const optionTexts = await Promise.all(
+        optionEls.map(async (el) => (await el.textContent() ?? '').trim()),
+      );
+      console.log(
+        `      visible menu items (${optionTexts.length}):`,
+        optionTexts.map((t) => `"${t}"`).join(', '),
+      );
+
+      // ── e) Fuzzy match: normalize both sides, try three tiers ────────────────
+      //
+      // The test-data constant may include a role prefix that the UI omits, e.g.:
+      //   expected  → "DS Asesor DDM #1"
+      //   UI label  → "Asesor DDM #1"
+      //
+      // Normalization removes:
+      //   • leading role abbreviations ("DS ", "SK ", "DM ", etc.)
+      //   • extra whitespace
+      //   • case differences
+      //
+      // Three match tiers (first hit wins):
+      //   1. Exact    — normalized(ui) === normalized(expected)
+      //   2. Contains — normalized(ui).includes(normalized(expected))   [UI is longer]
+      //   3. Reverse  — normalized(expected).includes(normalized(ui))   [expected is longer]
+      //
+      // This covers: prefix differences, trailing qualifiers, minor label rewording.
+      const normalize = (s: string): string =>
+        s.toLowerCase()
+          .replace(/^(ds|sk|dm|ta|mm|asdk|mha|dk|tas|asma)\s+/i, '')  // strip role prefix
+          .replace(/\s+/g, ' ')
+          .trim();
+
+      const normExpected = normalize(optionText);
+      console.log(`      normalized expected: "${normExpected}"`);
+
+      let matchedEl: (typeof optionEls)[number] | null = null;
+      let matchedText = '';
+      let matchTier = '';
+
+      // Tier 1 — exact after normalization
+      for (let i = 0; i < optionEls.length; i++) {
+        if (normalize(optionTexts[i]) === normExpected) {
+          matchedEl = optionEls[i];
+          matchedText = optionTexts[i];
+          matchTier = 'exact';
+          break;
+        }
+      }
+
+      // Tier 2 — UI label contains normalized expected (UI may be longer)
+      if (!matchedEl) {
+        for (let i = 0; i < optionEls.length; i++) {
+          if (normalize(optionTexts[i]).includes(normExpected)) {
+            matchedEl = optionEls[i];
+            matchedText = optionTexts[i];
+            matchTier = 'contains(ui⊇expected)';
+            break;
+          }
+        }
+      }
+
+      // Tier 3 — normalized expected contains UI label (expected is longer)
+      if (!matchedEl) {
+        for (let i = 0; i < optionEls.length; i++) {
+          if (normExpected.includes(normalize(optionTexts[i])) && normalize(optionTexts[i]).length > 0) {
+            matchedEl = optionEls[i];
+            matchedText = optionTexts[i];
+            matchTier = 'contains(expected⊇ui)';
+            break;
+          }
+        }
+      }
+
+      if (!matchedEl) {
+        throw new Error(
+          `[fillAssessorAssignment] group[${groupIndex}] "${labelText}": ` +
+          `no menu item matched "${optionText}" (normalized: "${normExpected}") ` +
+          `after exact, contains, and reverse-contains checks.\n` +
+          `Available items: [${optionTexts.map((t) => `"${t}"`).join(', ')}]\n` +
+          `Tip: update ASSESSOR_ASSIGNMENT.asesor_${groupIndex + 1}_name in spme-dikdasmen.ts ` +
+          `to match the UI label (prefix "DS " may need to be removed).`,
+        );
+      }
+
+      await matchedEl.click();
+      console.log(`      ↳ menu item [${matchTier}] "${matchedText}" ← matched "${optionText}"`);
+
+      await this.page.keyboard.press('Escape');
+      await this.page.waitForTimeout(300);
+
+      // Confirm trigger now reflects the selected value
+      const afterText = (await triggerBtn.textContent() ?? '').trim();
+      console.log(`      ✓ trigger text after selection: "${afterText}"`);
+    };
+
+    // ── 4. Fill both assessor fields ──────────────────────────────────────────
+    // Labels are ordered in DOM document order: index 0 = Assesor 1, 1 = Assesor 2.
+    await pickFromButtonDropdown(0, asesor1Name);
+    await pickFromButtonDropdown(1, asesor2Name);
+
+    // ── 5. Fill schedule date inputs ──────────────────────────────────────────
+    // Primary: find parent div whose label matches the date-field keyword.
+    // Fallback: positional index over all date/schedule inputs on the page.
+    const fillDateInput = async (
+      labelPattern: RegExp,
+      fallbackIndex: number,
+      value: string,
+    ): Promise<void> => {
+      console.log(`    [fillAssessorAssignment] date[${fallbackIndex}] "${value}" (${labelPattern})`);
+
+      const group = this.page.locator('div').filter({
+        has: this.page.locator('label').filter({ hasText: labelPattern }),
+      }).last();
+
+      if (await group.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        const inp = group.locator('input').first();
+        await inp.waitFor({ state: 'visible', timeout: 5_000 });
+        await inp.fill(value);
+        await this.page.keyboard.press('Tab');
+        console.log(`      ↳ date (label match) ← "${value}"`);
+        return;
+      }
+
+      // Positional fallback over date/schedule inputs
+      const dateInputs = this.page.locator(
+        'input[type="date"], ' +
+        'input[type="text"][name*="tanggal"], ' +
+        'input[type="text"][name*="jadwal"]',
+      );
+      const count = await dateInputs.count();
+      if (count > fallbackIndex) {
+        const inp = dateInputs.nth(fallbackIndex);
+        await inp.waitFor({ state: 'visible', timeout: 5_000 });
+        await inp.fill(value);
+        await this.page.keyboard.press('Tab');
+        console.log(`      ↳ date (positional[${fallbackIndex}]) ← "${value}"`);
+        return;
+      }
+
+      throw new Error(
+        `[fillAssessorAssignment] date field not found — ` +
+        `pattern=${labelPattern}, fallbackIndex=${fallbackIndex}, value="${value}". ` +
+        `Labels on page: ${allLabels.map((l) => `"${l.trim()}"`).join(', ')}`,
+      );
+    };
+
+    // "Jadwal Asessment Mulai *"   → fallback index 0
+    // "Jadwal Asessment Selesai *" → fallback index 1
+    await fillDateInput(/mulai|pravisitasi/i,  0, tanggalPravisitasi);
+    await fillDateInput(/selesai|visitasi/i,   1, tanggalVisitasi);
   }
 
   // ── custom-formlist helper ───────────────────────────────────────────────

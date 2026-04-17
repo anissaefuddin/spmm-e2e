@@ -99,6 +99,14 @@ export const ROLE_ACCESS: Record<RoleKey, RoleAccess> = {
     hiddenSidebarItems: ['Akun Manajemen', 'Tanda Tangan Elektronik'],
   },
 
+  asdk2: {
+    label: 'Asessor Dikdasmen',
+    allowedRoutes: ['/app/', '/app/assessment-submission'],
+    forbiddenRoutes: ['/app/user-management', '/app/esign'],
+    sidebarItems: ['Beranda', 'Laporan SPM Eksternal'],
+    hiddenSidebarItems: ['Akun Manajemen', 'Tanda Tangan Elektronik'],
+  },
+
   mha: {
     label: "Ma'had Aly",
     allowedRoutes: ['/app/', '/app/assessment-submission'],

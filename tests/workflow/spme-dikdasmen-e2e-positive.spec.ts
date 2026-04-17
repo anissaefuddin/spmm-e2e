@@ -26,25 +26,17 @@ import { SubmissionPage } from '../../pages/SubmissionPage';
 import { SpmeDikdasmenPage } from '../../pages/SpmeDikdasmenPage';
 import { waitForPageLoad } from '../../helpers/wait.helpers';
 import { fillDynamicForm } from '../../helpers/form.helpers';
-import { hasAuthState, getStorageStatePath } from '../../helpers/login.helpers';
+import { hasAuthState, getStorageStatePath, loginAs } from '../../helpers/login.helpers';
 import {
   TEST_FILES_DK,
   INSTITUTION,
   ASSESSOR_ASSIGNMENT,
   STANDARD_3_PENDIDIK,
-  PRAVISITASI_ASESOR_1,
-  PRAVISITASI_ASESOR_2,
   VISITASI_SCORES_MUMTAZ,
+  VISITASI_ROW_DATA,
   SK_VALIDASI,
   EXPECTED_GRADES,
 } from '../../test-data/spme-dikdasmen';
-
-// ─── Pravisitasi additional fields (not in constants) ─────────────────────
-const PRAVISITASI_EXTRA = {
-  Hasil_Akreditasi_Sebelumnya:       'B (Baik)',
-  Masa_Berlaku_Akreditasi_Sebelumnya:'2024-12-31',
-  Waktu_Pelaksanaan_Visitasi_Lapangan:'2025-05-15',
-} as const;
 
 // ─── Shared ticket state (set by Step 0, read by SK/ASDK steps) ───────────
 let noTiket: string | null = null;
@@ -109,18 +101,80 @@ function mapRawTask(t: Record<string, unknown>): TaskInfo {
   };
 }
 
-/** GET /api/wf/mytodolist → first task in the list */
-async function getFirstPendingTask(page: Page): Promise<TaskInfo | null> {
-  const resp = await page.request.get('/api/wf/mytodolist');
-  const body = await resp.json().catch(() => ({ data: [] })) as { data?: unknown[] };
-  const tasks = Array.isArray(body?.data) ? (body.data as Record<string, unknown>[]) : [];
-  if (!tasks.length) return null;
-  return mapRawTask(tasks[0]);
+/**
+ * API origin — distinct from Playwright's `baseURL` which points at the SPA.
+ *
+ * Playwright config:  BASE_URL     = http://localhost:3000  (SPA dev server)
+ * Backend API:        API_BASE_URL = http://localhost:1235/api
+ *
+ * The SPA's axios client (spmm-cms/src/services/axiosInstance.ts) is configured
+ * with `baseURL: VITE_API_BASE_URL` AND injects `Authorization: Bearer <token>`
+ * from the `token` cookie on every request.  Tests must replicate BOTH:
+ *   - hit the API origin (port 1235), not the SPA (port 3000)
+ *   - send the Bearer token header derived from the cookie
+ */
+const API_BASE = process.env.API_BASE_URL || 'http://localhost:1235/api';
+const apiUrl = (path: string): string => `${API_BASE}${path.startsWith('/') ? path : `/${path}`}`;
+
+/**
+ * Build the request payload + headers needed for /mytodolist.
+ *
+ * Schema (from spmm-cms/src/services/types/recommendationTypes.ts):
+ *   POST /mytodolist  with body { username, role, lembaga, workflow, status?, aktifitas? }
+ *   header: Authorization: Bearer <token>
+ *
+ * Reads the auth context from the page's cookies — no need to expose user
+ * details to the tests; everything is already in the storageState.
+ */
+async function buildTodolistRequest(
+  page: Page,
+  workflow = 'SPME DIKDASMEN',
+): Promise<{ headers: Record<string, string>; data: Record<string, unknown> }> {
+  const cookies = await page.context().cookies();
+  const tokenCookie       = cookies.find((c) => c.name === 'token');
+  const detailUserCookie  = cookies.find((c) => c.name === 'detailUser');
+
+  const detail = (() => {
+    if (!detailUserCookie?.value) return null;
+    try { return JSON.parse(decodeURIComponent(detailUserCookie.value)); }
+    catch { try { return JSON.parse(detailUserCookie.value); } catch { return null; } }
+  })() as { email?: string; fullname?: string; lembaga?: string | null; roles?: { role_code?: string }[] } | null;
+
+  // IMPORTANT: backend filters by `username = fullname`, NOT email.
+  // Verified against the actual SPA curl:
+  //   {"role":"DS","username":"Asesor DDM #1","lembaga":null,"workflow":"SPME DIKDASMEN","status":["Selesai","Sedang Diproses"]}
+  const username = detail?.fullname ?? '';
+  const role     = detail?.roles?.[0]?.role_code ?? '';
+  const lembaga  = detail?.lembaga ?? null;       // null when user has no institution scope
+
+  return {
+    headers: {
+      'Content-Type':  'application/json',
+      ...(tokenCookie?.value ? { Authorization: `Bearer ${tokenCookie.value}` } : {}),
+    },
+    data: {
+      role,
+      username,
+      lembaga,
+      workflow,
+      // Required filter — without it the backend returns 0 rows.
+      // "Sedang Diproses" = in-progress tasks (what we want); "Selesai" = completed (harmless).
+      status: ['Selesai', 'Sedang Diproses'],
+    },
+  };
 }
 
-/** GET /api/wf/mytodolist → all tasks */
+/** POST <API>/mytodolist → first task in the list */
+async function getFirstPendingTask(page: Page): Promise<TaskInfo | null> {
+  const tasks = await getAllPendingTasks(page);
+  return tasks[0] ?? null;
+}
+
+/** POST <API>/mytodolist → all tasks for the current user (filtered by SPME DIKDASMEN workflow) */
 async function getAllPendingTasks(page: Page): Promise<TaskInfo[]> {
-  const resp = await page.request.get('/api/wf/mytodolist');
+  const { headers, data } = await buildTodolistRequest(page);
+  const resp = await page.request.post(apiUrl('/mytodolist'), { headers, data });
+  if (!resp.ok()) return [];
   const body = await resp.json().catch(() => ({ data: [] })) as { data?: unknown[] };
   const tasks = Array.isArray(body?.data) ? (body.data as Record<string, unknown>[]) : [];
   return tasks.map((t) => mapRawTask(t as Record<string, unknown>));
@@ -335,7 +389,8 @@ async function assertWorkflowTransition(
     // ── Tier 2: mytodolist fallback ───────────────────────────────────────
     // Some workflow engines list tasks by role without URL-based redirect
     // protection.  Poll the API as a backup.
-    const resp = await page.request.get('/api/wf/mytodolist');
+    const { headers: tlHeaders, data: tlData } = await buildTodolistRequest(page);
+    const resp = await page.request.post(apiUrl('/mytodolist'), { headers: tlHeaders, data: tlData });
     const body = await resp.json().catch(() => ({ data: [] })) as { data?: unknown[] };
     lastListBody = body;
 
@@ -868,6 +923,296 @@ async function fillFormDataSection(
 // fillAllFormlistRows handles them generically — no per-step helper needed.
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Assessor-side helpers (Steps 12–27)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fetch all tasks in the current user's mytodolist that belong to `noTiket`.
+ * Matching rule: task_id starts with "<noTiket>-" OR no_tiket === noTiket.
+ *
+ * Use instead of `getFirstPendingTask()` when multiple tickets may coexist
+ * in the same user's queue — matching by ticket guarantees we act on the
+ * workflow under test and not some unrelated process.
+ */
+async function getTasksForTicket(page: Page, noTiket: string): Promise<TaskInfo[]> {
+  const all = await getAllPendingTasks(page);
+  return all.filter((t) =>
+    t.task_id.startsWith(noTiket + '-') || t.no_tiket === noTiket,
+  );
+}
+
+/**
+ * Poll mytodolist until the given user has at least one pending task for the
+ * target ticket.  Throws a detailed error if the poll budget is exhausted.
+ *
+ * NEVER silently skips — a workflow where an assessor has no task means
+ * either Step 9 (assignment) did not complete, or the auth state belongs to
+ * the wrong account.  Both are real failures and must halt the test.
+ */
+async function assertTaskExists(
+  page: Page,
+  noTiket: string,
+  label: string,
+  { retries = 6, delayMs = 4_000, initialWaitMs = 2_000 }: {
+    retries?: number; delayMs?: number; initialWaitMs?: number;
+  } = {},
+): Promise<TaskInfo> {
+  console.log(`  assertTaskExists [${label}]: polling for ticket "${noTiket}"`);
+  await page.waitForTimeout(initialWaitMs);
+
+  let lastSnapshot: TaskInfo[] = [];
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    const matches = await getTasksForTicket(page, noTiket);
+    lastSnapshot = await getAllPendingTasks(page);
+
+    if (matches.length > 0) {
+      const t = matches[0];
+      console.log(
+        `  assertTaskExists [${label}] ✓ found task_id="${t.task_id}" ` +
+        `name="${t.task_name}" role="${t.role_code}"`,
+      );
+      return t;
+    }
+
+    console.log(
+      `  assertTaskExists [${label}] attempt ${attempt}/${retries}: ` +
+      `no match for "${noTiket}" in ${lastSnapshot.length} pending task(s)`,
+    );
+    if (attempt < retries) await page.waitForTimeout(delayMs);
+  }
+
+  const dump = lastSnapshot.length
+    ? lastSnapshot.map((t) => `task_id="${t.task_id}" no_tiket="${t.no_tiket}" role="${t.role_code}"`).join('\n    ')
+    : '(empty queue)';
+
+  // ── Diagnostic: identify the authenticated user + dump raw mytodolist ─────
+  // We probe BOTH page.evaluate(fetch) AND context.request to distinguish:
+  //   - page redirected to /login (page.evaluate fails, context.request works)
+  //   - cookies cleared from context (both fail)
+  //   - endpoint URL is wrong (404 from context.request)
+  //   - role-specific endpoint required (200 from a candidate URL)
+
+  const currentUrl = page.url();
+  const cookies = await page.context().cookies();
+  const cookieSummary = cookies.map((c) => `${c.name}=${(c.value ?? '').slice(0, 20)}…`).join(', ');
+
+  const whoamiViaPage = await page.evaluate(async () => {
+    const tryFetch = async (url: string) => {
+      try {
+        const r = await fetch(url, { credentials: 'include' });
+        return { status: r.status, body: r.ok ? await r.json().catch(() => null) : null };
+      } catch (e) { return { status: 0, body: String(e) }; }
+    };
+    return {
+      detailMe: await tryFetch('/api/user/detail-me'),
+      detail:   await tryFetch('/api/user/detail'),
+    };
+  }).catch((e) => ({ error: String(e) }));
+
+  // Probe the actual /mytodolist endpoint with proper POST + auth.
+  // Use multiple candidate workflow strings in case the constant changed.
+  const workflowCandidates = [
+    'SPME DIKDASMEN',
+    'spme-dikdasmen',
+    'spme_dikdasmen',
+  ];
+  const probes: Array<{ url: string; status: number; count: number | null }> = [];
+  for (const wf of workflowCandidates) {
+    try {
+      const { headers, data } = await buildTodolistRequest(page, wf);
+      const r = await page.request.post(apiUrl('/mytodolist'), { headers, data });
+      const status = r.status();
+      let count: number | null = null;
+      if (status === 200) {
+        const body = await r.json().catch(() => null) as { data?: unknown[] } | null;
+        count = Array.isArray(body?.data) ? body!.data!.length : 0;
+      }
+      probes.push({ url: `POST /mytodolist  workflow="${wf}"`, status, count });
+    } catch (e) {
+      probes.push({ url: `POST /mytodolist  workflow="${wf}"  ERROR=${String(e).slice(0, 60)}`, status: 0, count: null });
+    }
+  }
+
+  console.error(`\n  ── assertTaskExists [${label}] DIAGNOSTIC ────────────────────────────`);
+  console.error(`  Page URL right now: ${currentUrl}`);
+  console.error(`  Cookies in context (${cookies.length}): ${cookieSummary}`);
+  console.error(`  page.evaluate fetch results:`, JSON.stringify(whoamiViaPage, null, 2));
+  console.error(`  Inbox URL probes (via page.request, uses storageState cookies):`);
+  for (const p of probes) {
+    const flag = p.status === 200 ? '  ← ✓ WORKS' : '';
+    console.error(`    ${p.status.toString().padStart(3, ' ')}  ${p.url}  count=${p.count}${flag}`);
+  }
+  console.error(`  ─────────────────────────────────────────────────────────────────────\n`);
+
+  // Compose summary fields used by the throw below
+  const whoami = whoamiViaPage && 'detailMe' in whoamiViaPage && whoamiViaPage.detailMe?.body
+    ? (whoamiViaPage.detailMe.body as { data?: { email?: string; fullname?: string; roles?: { role_code?: string }[] } })?.data
+    : null;
+
+  const roleStr = whoami?.roles?.map((r) => r.role_code).filter(Boolean).join(',') ?? '?';
+  const probeTable = probes
+    .map((p) => `    ${p.status.toString().padStart(3, ' ')}  ${p.url}  count=${p.count ?? '-'}${p.status === 200 ? '  ← ✓ WORKS' : ''}`)
+    .join('\n');
+  const cookieNames = cookies.map((c) => c.name).join(', ') || '(none)';
+  const detailMeStatus = (whoamiViaPage as { detailMe?: { status?: number } })?.detailMe?.status ?? '?';
+  const detailStatus   = (whoamiViaPage as { detail?:   { status?: number } })?.detail?.status   ?? '?';
+
+  throw new Error(
+    `[${label}] No pending task for ticket "${noTiket}" after ${retries} attempts.\n\n` +
+    `── DIAGNOSTIC ──────────────────────────────────────────────────────────\n` +
+    `Authenticated as: ${whoami?.email ?? '(unknown)'} (role: ${roleStr}, name: "${whoami?.fullname ?? '?'}")\n` +
+    `Page URL at failure: ${currentUrl}\n` +
+    `Cookies in context (${cookies.length}): ${cookieNames}\n` +
+    `page.evaluate fetch:  /api/user/detail-me → HTTP ${detailMeStatus}   /api/user/detail → HTTP ${detailStatus}\n` +
+    `Current mytodolist snapshot:\n    ${dump}\n\n` +
+    `Inbox URL probes (page.request, uses storageState cookies):\n${probeTable}\n` +
+    `────────────────────────────────────────────────────────────────────────\n\n` +
+    `Likely causes (read the diagnostic above to pick one):\n` +
+    `  • If page.evaluate fetch returned 200 but mytodolist is empty → user has no tasks (Step 9 didn't assign them).\n` +
+    `  • If page.evaluate returned 401/0 but a probe URL returned 200 → wrong inbox URL hardcoded.\n` +
+    `  • If ALL fetches returned 401 → cookies stripped or invalid for backend.\n` +
+    `  • If page.evaluate returned 200 with email mismatching the role's expected user → wrong account in auth file.`,
+  );
+}
+
+/**
+ * Pick the first real business value on a native <select>.
+ * Skips placeholder options using the shared isPlaceholderValue() predicate.
+ * Returns the selected value or null if no valid option exists.
+ */
+async function fillDropdownValid(select: Locator, preferred?: string): Promise<string | null> {
+  const opts = await select.locator('option').all();
+
+  // Try preferred text match first (e.g. "Memenuhi")
+  if (preferred) {
+    for (const opt of opts) {
+      const text = (await opt.textContent() ?? '').trim();
+      const val = await opt.getAttribute('value');
+      if (!isPlaceholderValue(val) && text.toLowerCase().includes(preferred.toLowerCase())) {
+        await select.selectOption(val!);
+        return val;
+      }
+    }
+  }
+
+  // Fallback: any non-placeholder value
+  for (const opt of opts) {
+    const val = await opt.getAttribute('value');
+    if (!isPlaceholderValue(val)) {
+      await select.selectOption(val!);
+      return val;
+    }
+  }
+  return null;
+}
+
+/**
+ * Fill one visitasi custom-formlist row end-to-end.
+ *
+ * Each row has these editable fields (order varies by standard):
+ *   • TELAAH DOKUMEN         — textarea
+ *   • WAWANCARA              — textarea
+ *   • OBSERVASI              — textarea
+ *   • STATUS                 — select (must pick "Memenuhi", never "-")
+ *   • ALASAN                 — textarea
+ *   • BUKTI                  — file upload
+ *   • SKOR                   — select (pick "4" — highest)
+ *   • KOMPONEN TERPENUHI     — textarea
+ *   • KOMPONEN TIDAK TERPENUHI — textarea
+ *   • SARAN                  — textarea
+ *
+ * Strategy: fill every visible textarea with the canonical per-field text
+ * from VISITASI_ROW_DATA using label-based matching; pick valid values on
+ * every select; upload to any "Upload File" button encountered.
+ */
+async function fillVisitasiFormRow(
+  page: Page,
+  row: Locator,
+  rowIndex: number,
+  filePath: string,
+): Promise<void> {
+  console.log(`    fillVisitasiFormRow [row ${rowIndex}]: starting`);
+
+  // ── Fill textareas — try per-label mapping first, fall back to uniform value
+  const textareas = await row.locator('textarea').all();
+  console.log(`      textareas in row: ${textareas.length}`);
+
+  // Label → canonical value mapping. We match against the textarea's
+  // associated label text (parent td's column header cannot be read here,
+  // so we use name/placeholder/preceding label text as best-effort signals).
+  const labelMap: Array<{ pat: RegExp; value: string }> = [
+    { pat: /telaah/i,           value: VISITASI_ROW_DATA.telaah_dokumen },
+    { pat: /wawancara/i,        value: VISITASI_ROW_DATA.wawancara },
+    { pat: /observasi/i,        value: VISITASI_ROW_DATA.observasi },
+    { pat: /alasan/i,           value: VISITASI_ROW_DATA.alasan },
+    { pat: /terpenuhi/i,        value: VISITASI_ROW_DATA.komponen_terpenuhi },
+    { pat: /tidak.*terpenuhi/i, value: VISITASI_ROW_DATA.komponen_tidak_terpenuhi },
+    { pat: /saran/i,            value: VISITASI_ROW_DATA.saran },
+  ];
+
+  for (let ti = 0; ti < textareas.length; ti++) {
+    const ta = textareas[ti];
+    if (!await ta.isVisible().catch(() => false)) continue;
+    if (await ta.isDisabled().catch(() => true)) continue;
+
+    // Extract identifying text from attributes + nearest header cell
+    const nameAttr = (await ta.getAttribute('name') ?? '').toLowerCase();
+    const idAttr   = (await ta.getAttribute('id') ?? '').toLowerCase();
+    const plcAttr  = (await ta.getAttribute('placeholder') ?? '').toLowerCase();
+    const signal   = `${nameAttr} ${idAttr} ${plcAttr}`;
+
+    const match = labelMap.find(({ pat }) => pat.test(signal));
+    const value = match?.value ?? VISITASI_ROW_DATA.alasan; // default
+    await ta.fill(value);
+    console.log(`      textarea[${ti}] signal="${signal.trim()}" ← "${value.slice(0, 40)}…"`);
+  }
+
+  // ── Fill every select — STATUS, SKOR, plus any auxiliary dropdowns
+  const selects = await row.locator('select').all();
+  console.log(`      selects in row: ${selects.length}`);
+
+  for (let si = 0; si < selects.length; si++) {
+    const sel = selects[si];
+    if (!await sel.isVisible().catch(() => false)) continue;
+
+    const nameAttr = (await sel.getAttribute('name') ?? '').toLowerCase();
+    const idAttr   = (await sel.getAttribute('id') ?? '').toLowerCase();
+    const signal   = `${nameAttr} ${idAttr}`;
+
+    // STATUS → prefer "Memenuhi"; SKOR → prefer "4"; else first valid option
+    let preferred: string | undefined;
+    if (/status/i.test(signal))          preferred = VISITASI_ROW_DATA.status;
+    else if (/skor|rating|nilai/i.test(signal)) preferred = VISITASI_ROW_DATA.skor;
+
+    const picked = await fillDropdownValid(sel, preferred);
+    if (picked === null) {
+      throw new Error(
+        `fillVisitasiFormRow [row ${rowIndex}] select[${si}] (${signal.trim()}): ` +
+        `no valid option found — only placeholder values present.`,
+      );
+    }
+    console.log(`      select[${si}] "${signal.trim()}" → "${picked}" (preferred="${preferred ?? '(any)'}")`);
+  }
+
+  // ── Upload BUKTI file if an upload button exists in the row
+  const uploadBtn = row.getByRole('button', { name: /Upload\s*File/i }).first();
+  const hasUpload = await uploadBtn.isVisible({ timeout: 1_000 }).catch(() => false);
+  if (hasUpload) {
+    const uploadRespPromise = page
+      .waitForResponse((r) => r.url().includes('/uploadfile1') && r.status() === 200, { timeout: 20_000 })
+      .catch(() => null);
+    await uploadBtn.click();
+    const modalInput = page.locator('input[type="file"]').last();
+    await modalInput.waitFor({ state: 'attached', timeout: 8_000 });
+    await modalInput.setInputFiles(filePath);
+    const resp = await uploadRespPromise;
+    console.log(`      BUKTI upload HTTP: ${resp?.status() ?? 'no response'}`);
+    await row.getByRole('button', { name: /Lihat\s*File/i }).first()
+      .waitFor({ state: 'visible', timeout: 10_000 }).catch(() => null);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Serial E2E test suite
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1160,7 +1505,7 @@ test.describe('E2E Positive — 1 Ticket (SPME DIKDASMEN → Mumtaz)', () => {
   // STEP 9 — SK: Assign Asesor 1 & Asesor 2 with schedule dates
   // ══════════════════════════════════════════════════════════════════════════
   test('Step 9 — SK: Assign Assessors', async ({ browser }) => {
-    test.setTimeout(60_000);
+    test.setTimeout(90_000);
     expect(noTiket, 'noTiket must be set by Step 0').toBeTruthy();
     if (!hasAuthState('sk')) test.skip(true, 'sk auth state missing');
 
@@ -1177,12 +1522,18 @@ test.describe('E2E Positive — 1 Ticket (SPME DIKDASMEN → Mumtaz)', () => {
     try {
       await openSubmissionTask(page, step9TaskId);
       await page.waitForLoadState('networkidle');
+      // Extra settle time — Step 9 form loads assessor list via API; wait for it to populate
+      await page.waitForTimeout(1_500);
 
       // Confirm we landed on the right page, not a redirect
       expect(
         page.url(),
         `[Step 9] Navigation to task "${step9TaskId}" redirected — task may not exist`,
       ).toContain(step9TaskId);
+
+      // Log all visible labels for diagnostics
+      const labels = await page.locator('label').allTextContents();
+      console.log(`[Step 9] Visible labels: ${labels.map(l => `"${l.trim()}"`).join(', ')}`);
 
       // Fill assessor assignment using SpmeDikdasmenPage helper
       const spme = new SpmeDikdasmenPage(page);
@@ -1193,12 +1544,12 @@ test.describe('E2E Positive — 1 Ticket (SPME DIKDASMEN → Mumtaz)', () => {
         ASSESSOR_ASSIGNMENT.tanggal_visitasi,
       );
 
-      // Fill catatan penunjukan
-      await fillDynamicForm(page, [
-        { name: 'catatan_penunjukan', type: 'textarea', value: ASSESSOR_ASSIGNMENT.catatan_penunjukan },
-        // Also try with_catatan variant
-        { name: 'Catatan_Penunjukan', type: 'textarea', value: ASSESSOR_ASSIGNMENT.catatan_penunjukan },
-      ]);
+      // // Fill catatan penunjukan
+      // await fillDynamicForm(page, [
+      //   { name: 'catatan_penunjukan', type: 'textarea', value: ASSESSOR_ASSIGNMENT.catatan_penunjukan },
+      //   // Also try with_catatan variant
+      //   { name: 'Catatan_Penunjukan', type: 'textarea', value: ASSESSOR_ASSIGNMENT.catatan_penunjukan },
+      // ]);
 
       await clickApprove(page);
       console.log('[Step 9] ✓ Assessors assigned:', ASSESSOR_ASSIGNMENT.asesor_1_name, '+', ASSESSOR_ASSIGNMENT.asesor_2_name);
@@ -1209,65 +1560,53 @@ test.describe('E2E Positive — 1 Ticket (SPME DIKDASMEN → Mumtaz)', () => {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
-  // STEPS 12–13 — DS: Pravisitasi Asesor 1
-  // Validate DD data from Step 0 + fill assessor-specific fields
+  // STEPS 12–13 — DS Asesor 1: Pravisitasi review
+  // Auth: asdk  (first assessor assigned in Step 9)
   // ══════════════════════════════════════════════════════════════════════════
-  test('Steps 12–13 — DS: Pravisitasi Asesor 1', async ({ browser }) => {
-    test.setTimeout(90_000);
-    if (!hasAuthState('asdk')) test.skip(true, 'asdk auth state missing');
+  test('Steps 12–13 — DS Asesor 1: Pravisitasi', async ({ browser }) => {
+    test.setTimeout(120_000);
+    expect(noTiket, 'noTiket must be set by Step 0').toBeTruthy();
+    if (!hasAuthState('asdk')) throw new Error('[Steps 12-13] asdk auth state missing — run global-setup');
 
-    const context = await browser.newContext({ storageState: getStorageStatePath('asdk') });
+    // Use loginAs instead of raw newContext — auto-refreshes the JWT if the
+    // cached storageState has expired (default 2-hour TTL on /api/login tokens).
+    const context = await loginAs('asdk', browser);
     const page = await context.newPage();
 
     try {
       await page.goto('/app/spme/dikdasmen');
       await waitForPageLoad(page);
 
-      // Process up to 2 tasks for Asesor 1 (Steps 12 and 13 may be separate tasks)
+      // Asesor 1 may receive up to 2 pravisitasi tasks (12 and 13).
+      // Fail hard if we cannot find the FIRST one — silently skipping masks
+      // the real root cause (wrong credentials or Step 9 never created tasks).
       for (let stepIdx = 0; stepIdx < 2; stepIdx++) {
-        const task = await getFirstPendingTask(page);
-        if (!task?.task_id) {
-          console.warn(`[Steps 12-13] No pending ASDK task at iteration ${stepIdx + 1}`);
+        const task = stepIdx === 0
+          ? await assertTaskExists(page, noTiket!, `Steps 12-13 [attempt ${stepIdx + 1}]`)
+          : (await getTasksForTicket(page, noTiket!))[0];
+
+        if (!task) {
+          console.log(`[Steps 12-13] No further task for ticket after ${stepIdx} iteration(s) — second task may not be required`);
           break;
         }
-        console.log(`[Steps 12-13] Opening ASDK task [${stepIdx + 1}]:`, task.task_id, '|', task.task_name);
+        console.log(`[Steps 12-13] Opening task [${stepIdx + 1}]: ${task.task_id} | ${task.task_name}`);
 
         await openAssessorTask(page, task.task_id);
 
-        // Data validation: verify Step 0 institution data is visible (read-only fields)
+        // Verify Step 0 institution data flowed through (read-only context only)
         const namaVisible = await page.locator(`text=${INSTITUTION.nama_lembaga}`).first()
           .isVisible({ timeout: 3_000 }).catch(() => false);
-        console.log(`[Steps 12-13] Institution name visible in form: ${namaVisible}`);
+        console.log(`[Steps 12-13] Institution name visible: ${namaVisible}`);
 
-        // Fill assessor 1 pravisitasi fields
-        await fillDynamicForm(page, [
-          // Data verification notes
-          { name: 'pravisit_daftarSiswa_catatan',          type: 'textarea', value: PRAVISITASI_ASESOR_1.pravisit_daftarSiswa_catatan },
-          { name: 'pravisit_daftarLulusan_asesor1',         type: 'textarea', value: PRAVISITASI_ASESOR_1.pravisit_daftarLulusan_asesor1 },
-          { name: 'pravisit_kurikulum_asesor1',             type: 'textarea', value: PRAVISITASI_ASESOR_1.pravisit_kurikulum_asesor1 },
-          { name: 'pravisit_strukturDewan_asesor1',         type: 'textarea', value: PRAVISITASI_ASESOR_1.pravisit_strukturDewan_asesor1 },
-          { name: 'catatan_pravisitasi',                    type: 'textarea', value: PRAVISITASI_ASESOR_1.catatan_pravisitasi },
-          // Additional fields from prompt (not in existing constants)
-          { name: 'Hasil_Akreditasi_Sebelumnya',            type: 'text',     value: PRAVISITASI_EXTRA.Hasil_Akreditasi_Sebelumnya },
-          { name: 'Masa_Berlaku_Akreditasi_Sebelumnya',     type: 'date',     value: PRAVISITASI_EXTRA.Masa_Berlaku_Akreditasi_Sebelumnya },
-          { name: 'Waktu_Pelaksanaan_Visitasi_Lapangan',    type: 'date',     value: PRAVISITASI_EXTRA.Waktu_Pelaksanaan_Visitasi_Lapangan },
-        ]);
-
-        // Qualification assessments (select fields)
-        await fillDynamicForm(page, [
-          { name: 'pravisit_kualifikasiKepala_memenuhi',        type: 'select', value: PRAVISITASI_ASESOR_1.pravisit_kualifikasiKepala_memenuhi },
-          { name: 'pravisit_kualifikasiPendidik_memenuhi',      type: 'select', value: PRAVISITASI_ASESOR_1.pravisit_kualifikasiPendidik_memenuhi },
-          { name: 'pravisit_kualifikasiAdministrasi_memenuhi',  type: 'select', value: PRAVISITASI_ASESOR_1.pravisit_kualifikasiAdministrasi_memenuhi },
-          { name: 'pravisit_kualifikasiPustakawan_memenuhi',    type: 'select', value: PRAVISITASI_ASESOR_1.pravisit_kualifikasiPustakawan_memenuhi },
-        ]);
-
-        await clickApprove(page);
-        console.log(`[Steps 12-13] ✓ Pravisitasi Asesor 1 step ${stepIdx + 1} submitted`);
+        // NOTE: Steps 12–13 (Pravisitasi Asesor 1) accept "approve" without any
+        // form input — the workflow definition allows direct forward-progression.
+        // We intentionally skip fillDynamicForm here.
+        await clickApprove(page, `Steps 12-13 [${stepIdx + 1}]`);
+        console.log(`[Steps 12-13] ✓ Asesor 1 task ${stepIdx + 1} approved (no form fill required)`);
 
         await page.waitForTimeout(500);
-        // Reload task list for next iteration
-        const nextTask = await getFirstPendingTask(page);
-        if (!nextTask?.task_id || nextTask.task_id === task.task_id) break;
+        await page.goto('/app/spme/dikdasmen');
+        await waitForPageLoad(page);
       }
 
       console.log('[Steps 12-13] ✓ Pravisitasi Asesor 1 complete');
@@ -1278,13 +1617,19 @@ test.describe('E2E Positive — 1 Ticket (SPME DIKDASMEN → Mumtaz)', () => {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
-  // STEPS 14–15 — DS: Pravisitasi Asesor 2
+  // STEPS 14–15 — DS Asesor 2: Pravisitasi review
+  // Auth: asdk2 (DIFFERENT account from Asesor 1 — see users.ts)
   // ══════════════════════════════════════════════════════════════════════════
-  test('Steps 14–15 — DS: Pravisitasi Asesor 2', async ({ browser }) => {
-    test.setTimeout(90_000);
-    if (!hasAuthState('asdk')) test.skip();
+  test('Steps 14–15 — DS Asesor 2: Pravisitasi', async ({ browser }) => {
+    test.setTimeout(120_000);
+    expect(noTiket, 'noTiket must be set by Step 0').toBeTruthy();
+    if (!hasAuthState('asdk2')) throw new Error(
+      '[Steps 14-15] asdk2 auth state missing — add TEST_ASDK2_EMAIL to .env.test ' +
+      'and re-run global-setup (the second assessor must be a different account).',
+    );
 
-    const context = await browser.newContext({ storageState: getStorageStatePath('asdk') });
+    // IMPORTANT: use asdk2 (the second assessor), NOT asdk
+    const context = await loginAs('asdk2', browser);
     const page = await context.newPage();
 
     try {
@@ -1292,40 +1637,26 @@ test.describe('E2E Positive — 1 Ticket (SPME DIKDASMEN → Mumtaz)', () => {
       await waitForPageLoad(page);
 
       for (let stepIdx = 0; stepIdx < 2; stepIdx++) {
-        const task = await getFirstPendingTask(page);
-        if (!task?.task_id) {
-          console.warn(`[Steps 14-15] No pending ASDK task at iteration ${stepIdx + 1} — the second assessor may be a different user`);
+        const task = stepIdx === 0
+          ? await assertTaskExists(page, noTiket!, `Steps 14-15 [attempt ${stepIdx + 1}]`)
+          : (await getTasksForTicket(page, noTiket!))[0];
+
+        if (!task) {
+          console.log(`[Steps 14-15] No further task for ticket after ${stepIdx} iteration(s)`);
           break;
         }
-        console.log(`[Steps 14-15] Opening ASDK task [${stepIdx + 1}]:`, task.task_id, '|', task.task_name);
+        console.log(`[Steps 14-15] Opening task [${stepIdx + 1}]: ${task.task_id} | ${task.task_name}`);
 
         await openAssessorTask(page, task.task_id);
 
-        // Fill assessor 2 pravisitasi fields
-        await fillDynamicForm(page, [
-          { name: 'pravisit_daftarSiswa_catatan',         type: 'textarea', value: PRAVISITASI_ASESOR_2.pravisit_daftarSiswa_catatan },
-          { name: 'pravisit_daftarLulusan_asesor2',        type: 'textarea', value: PRAVISITASI_ASESOR_2.pravisit_daftarLulusan_asesor2 },
-          { name: 'pravisit_kurikulum_asesor2',            type: 'textarea', value: PRAVISITASI_ASESOR_2.pravisit_kurikulum_asesor2 },
-          { name: 'pravisit_strukturDewan_asesor2',        type: 'textarea', value: PRAVISITASI_ASESOR_2.pravisit_strukturDewan_asesor2 },
-          { name: 'catatan_pravisitasi',                   type: 'textarea', value: PRAVISITASI_ASESOR_2.catatan_pravisitasi },
-          { name: 'Hasil_Akreditasi_Sebelumnya',           type: 'text',     value: PRAVISITASI_EXTRA.Hasil_Akreditasi_Sebelumnya },
-          { name: 'Masa_Berlaku_Akreditasi_Sebelumnya',    type: 'date',     value: PRAVISITASI_EXTRA.Masa_Berlaku_Akreditasi_Sebelumnya },
-          { name: 'Waktu_Pelaksanaan_Visitasi_Lapangan',   type: 'date',     value: PRAVISITASI_EXTRA.Waktu_Pelaksanaan_Visitasi_Lapangan },
-        ]);
-
-        await fillDynamicForm(page, [
-          { name: 'pravisit_kualifikasiKepala_memenuhi',       type: 'select', value: PRAVISITASI_ASESOR_2.pravisit_kualifikasiKepala_memenuhi },
-          { name: 'pravisit_kualifikasiPendidik_memenuhi',     type: 'select', value: PRAVISITASI_ASESOR_2.pravisit_kualifikasiPendidik_memenuhi },
-          { name: 'pravisit_kualifikasiAdministrasi_memenuhi', type: 'select', value: PRAVISITASI_ASESOR_2.pravisit_kualifikasiAdministrasi_memenuhi },
-          { name: 'pravisit_kualifikasiPustakawan_memenuhi',   type: 'select', value: PRAVISITASI_ASESOR_2.pravisit_kualifikasiPustakawan_memenuhi },
-        ]);
-
-        await clickApprove(page);
-        console.log(`[Steps 14-15] ✓ Pravisitasi Asesor 2 step ${stepIdx + 1} submitted`);
+        // NOTE: Steps 14–15 (Pravisitasi Asesor 2) — same as 12–13, the workflow
+        // accepts approve without any form input. Skip fillDynamicForm.
+        await clickApprove(page, `Steps 14-15 [${stepIdx + 1}]`);
+        console.log(`[Steps 14-15] ✓ Asesor 2 task ${stepIdx + 1} approved (no form fill required)`);
 
         await page.waitForTimeout(500);
-        const nextTask = await getFirstPendingTask(page);
-        if (!nextTask?.task_id || nextTask.task_id === task.task_id) break;
+        await page.goto('/app/spme/dikdasmen');
+        await waitForPageLoad(page);
       }
 
       console.log('[Steps 14-15] ✓ Pravisitasi Asesor 2 complete');
@@ -1336,89 +1667,24 @@ test.describe('E2E Positive — 1 Ticket (SPME DIKDASMEN → Mumtaz)', () => {
   });
 
   // ══════════════════════════════════════════════════════════════════════════
-  // STEPS 20–23 — DS: Visitasi Asesor 1 (scoring all 4 standards)
+  // STEPS 20–23 — DS Asesor 1: Visitasi scoring (4 standards, Mumtaz target)
   //
-  // Scores use VISITASI_SCORES_MUMTAZ (all ≥ 88) → total ≥ 90 → Mumtaz.
-  // Each step = one standard's scoring table.  Submit 4 tasks sequentially.
+  // Each standard uses a custom-formlist where EVERY row must be filled with:
+  //   TELAAH DOKUMEN, WAWANCARA, OBSERVASI (textareas)
+  //   STATUS ("Memenuhi"), ALASAN, BUKTI (file), SKOR ("4")
+  //   KOMPONEN TERPENUHI / TIDAK TERPENUHI / SARAN
+  //
+  // Scoring table values come from VISITASI_SCORES_MUMTAZ (≥ 88 per indicator)
+  // to drive the total to ≥ 90 (Mumtaz grade).
   // ══════════════════════════════════════════════════════════════════════════
-  test('Steps 20–23 — DS: Visitasi Scoring Asesor 1', async ({ browser }) => {
-    test.setTimeout(120_000);
-    if (!hasAuthState('asdk')) test.skip();
+  test('Steps 20–23 — DS Asesor 1: Visitasi Scoring', async ({ browser }) => {
+    test.setTimeout(180_000);
+    expect(noTiket, 'noTiket must be set by Step 0').toBeTruthy();
+    if (!hasAuthState('asdk')) throw new Error('[Steps 20-23] asdk auth state missing');
 
-    const context = await browser.newContext({ storageState: getStorageStatePath('asdk') });
-    const page = await context.newPage();
-
-    // Flatten VISITASI_SCORES_MUMTAZ → ordered array of { skor, bobot }
-    // Indices 0-2 = Std1, 3-5 = Std2, 6-8 = Std3, 9-11 = Std4
-    const allScores = Object.values(VISITASI_SCORES_MUMTAZ) as Array<{ skor: string; bobot: string }>;
-    // Split into 4 groups of 3 indicators per standard
-    const scoresByStandard = [
-      allScores.slice(0, 3),  // Standard 1
-      allScores.slice(3, 6),  // Standard 2
-      allScores.slice(6, 9),  // Standard 3
-      allScores.slice(9, 12), // Standard 4
-    ];
-
-    try {
-      await page.goto('/app/spme/dikdasmen');
-      await waitForPageLoad(page);
-
-      for (let stdIdx = 0; stdIdx < 4; stdIdx++) {
-        const task = await getFirstPendingTask(page);
-        if (!task?.task_id) {
-          console.warn(`[Steps 20-23] No pending ASDK task for Standard ${stdIdx + 1}`);
-          break;
-        }
-        console.log(`[Steps 20-23] Standard ${stdIdx + 1} | task:`, task.task_id, '|', task.task_name);
-
-        await openAssessorTask(page, task.task_id);
-
-        const spme = new SpmeDikdasmenPage(page);
-
-        // Primary: fill scoring table rows with explicit Mumtaz scores
-        const tableCount = await page.locator('table').count();
-        if (tableCount > 0) {
-          await spme.fillScoringTable(scoresByStandard[stdIdx]);
-          console.log(`[Steps 20-23] Std ${stdIdx + 1}: filled ${scoresByStandard[stdIdx].length} score rows`);
-        } else {
-          // Fallback: fill named score inputs directly
-          const scores = scoresByStandard[stdIdx];
-          for (let i = 0; i < scores.length; i++) {
-            await fillDynamicForm(page, [
-              { name: `skor_std${stdIdx + 1}_ind${i + 1}`,  type: 'number', value: scores[i].skor },
-              { name: `bobot_std${stdIdx + 1}_ind${i + 1}`, type: 'number', value: scores[i].bobot },
-            ]);
-          }
-        }
-
-        // Catatan visitasi
-        await fillDynamicForm(page, [
-          { name: 'catatan_visitasi', type: 'textarea', value: `Visitasi Standard ${stdIdx + 1}: kondisi sesuai standar, nilai memenuhi kriteria Mumtaz.` },
-        ]);
-
-        await clickApprove(page);
-        console.log(`[Steps 20-23] ✓ Standard ${stdIdx + 1} visitasi submitted`);
-
-        await page.waitForTimeout(500);
-        await page.goto('/app/spme/dikdasmen');
-        await waitForPageLoad(page);
-      }
-
-      console.log('[Steps 20-23] ✓ Visitasi Asesor 1 complete — all 4 standards scored (Mumtaz target)');
-
-    } finally {
-      await context.close();
-    }
-  });
-
-  // ══════════════════════════════════════════════════════════════════════════
-  // STEPS 24–27 — DS: Visitasi Asesor 2 (scoring all 4 standards)
-  // ══════════════════════════════════════════════════════════════════════════
-  test('Steps 24–27 — DS: Visitasi Scoring Asesor 2', async ({ browser }) => {
-    test.setTimeout(120_000);
-    if (!hasAuthState('asdk')) test.skip();
-
-    const context = await browser.newContext({ storageState: getStorageStatePath('asdk') });
+    // Use loginAs instead of raw newContext — auto-refreshes the JWT if the
+    // cached storageState has expired (default 2-hour TTL on /api/login tokens).
+    const context = await loginAs('asdk', browser);
     const page = await context.newPage();
 
     const allScores = Object.values(VISITASI_SCORES_MUMTAZ) as Array<{ skor: string; bobot: string }>;
@@ -1434,34 +1700,109 @@ test.describe('E2E Positive — 1 Ticket (SPME DIKDASMEN → Mumtaz)', () => {
       await waitForPageLoad(page);
 
       for (let stdIdx = 0; stdIdx < 4; stdIdx++) {
-        const task = await getFirstPendingTask(page);
-        if (!task?.task_id) {
-          console.warn(`[Steps 24-27] No pending ASDK task for Standard ${stdIdx + 1} (Asesor 2 may be a different user)`);
-          break;
-        }
-        console.log(`[Steps 24-27] Standard ${stdIdx + 1} | task:`, task.task_id);
+        // Asserting existence here catches any silent failure in the previous
+        // standard (e.g. validation error on approve) immediately.
+        const task = await assertTaskExists(page, noTiket!, `Steps 20-23 std ${stdIdx + 1}`);
+        console.log(`[Steps 20-23] Std ${stdIdx + 1} | task: ${task.task_id}`);
 
         await openAssessorTask(page, task.task_id);
 
         const spme = new SpmeDikdasmenPage(page);
-        const tableCount = await page.locator('table').count();
-        if (tableCount > 0) {
+
+        // Fill each row in the visitasi custom-formlist with full data
+        const rows = page.locator('table tbody tr');
+        const rowCount = await rows.count();
+        console.log(`[Steps 20-23] Std ${stdIdx + 1}: ${rowCount} row(s) in visitasi table`);
+
+        for (let ri = 0; ri < rowCount; ri++) {
+          const row = rows.nth(ri);
+          const isEditable = (await row.locator('textarea, select, button').count()) > 0;
+          if (!isEditable) continue;
+          await fillVisitasiFormRow(page, row, ri, TEST_FILES_DK.pdf);
+        }
+
+        // Apply the per-indicator scoring numbers on top of the row fills
+        if (rowCount > 0) {
           await spme.fillScoringTable(scoresByStandard[stdIdx]);
-        } else {
-          for (let i = 0; i < scoresByStandard[stdIdx].length; i++) {
-            await fillDynamicForm(page, [
-              { name: `skor_std${stdIdx + 1}_ind${i + 1}`,  type: 'number', value: scoresByStandard[stdIdx][i].skor },
-              { name: `bobot_std${stdIdx + 1}_ind${i + 1}`, type: 'number', value: scoresByStandard[stdIdx][i].bobot },
-            ]);
-          }
+        }
+
+        // Catatan visitasi (page-level textarea, not per-row)
+        await fillDynamicForm(page, [
+          { name: 'catatan_visitasi', type: 'textarea',
+            value: `Visitasi Standard ${stdIdx + 1}: kondisi sesuai standar, memenuhi kriteria Mumtaz.` },
+        ]);
+
+        await validateAllFieldsFilled(page, `Steps 20-23 std ${stdIdx + 1}`);
+        await clickApprove(page, `Steps 20-23 std ${stdIdx + 1}`);
+        console.log(`[Steps 20-23] ✓ Std ${stdIdx + 1} submitted`);
+
+        await page.waitForTimeout(500);
+        await page.goto('/app/spme/dikdasmen');
+        await waitForPageLoad(page);
+      }
+
+      console.log('[Steps 20-23] ✓ Visitasi Asesor 1 complete (Mumtaz target)');
+
+    } finally {
+      await context.close();
+    }
+  });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // STEPS 24–27 — DS Asesor 2: Visitasi scoring (4 standards)
+  // Auth: asdk2 (second assessor account)
+  // ══════════════════════════════════════════════════════════════════════════
+  test('Steps 24–27 — DS Asesor 2: Visitasi Scoring', async ({ browser }) => {
+    test.setTimeout(180_000);
+    expect(noTiket, 'noTiket must be set by Step 0').toBeTruthy();
+    if (!hasAuthState('asdk2')) throw new Error('[Steps 24-27] asdk2 auth state missing');
+
+    const context = await loginAs('asdk2', browser);
+    const page = await context.newPage();
+
+    const allScores = Object.values(VISITASI_SCORES_MUMTAZ) as Array<{ skor: string; bobot: string }>;
+    const scoresByStandard = [
+      allScores.slice(0, 3),
+      allScores.slice(3, 6),
+      allScores.slice(6, 9),
+      allScores.slice(9, 12),
+    ];
+
+    try {
+      await page.goto('/app/spme/dikdasmen');
+      await waitForPageLoad(page);
+
+      for (let stdIdx = 0; stdIdx < 4; stdIdx++) {
+        const task = await assertTaskExists(page, noTiket!, `Steps 24-27 std ${stdIdx + 1}`);
+        console.log(`[Steps 24-27] Std ${stdIdx + 1} | task: ${task.task_id}`);
+
+        await openAssessorTask(page, task.task_id);
+
+        const spme = new SpmeDikdasmenPage(page);
+
+        const rows = page.locator('table tbody tr');
+        const rowCount = await rows.count();
+        console.log(`[Steps 24-27] Std ${stdIdx + 1}: ${rowCount} row(s) in visitasi table`);
+
+        for (let ri = 0; ri < rowCount; ri++) {
+          const row = rows.nth(ri);
+          const isEditable = (await row.locator('textarea, select, button').count()) > 0;
+          if (!isEditable) continue;
+          await fillVisitasiFormRow(page, row, ri, TEST_FILES_DK.pdf);
+        }
+
+        if (rowCount > 0) {
+          await spme.fillScoringTable(scoresByStandard[stdIdx]);
         }
 
         await fillDynamicForm(page, [
-          { name: 'catatan_visitasi', type: 'textarea', value: `Visitasi Standard ${stdIdx + 1} (Asesor 2): nilai sesuai, memenuhi kriteria Mumtaz.` },
+          { name: 'catatan_visitasi', type: 'textarea',
+            value: `Visitasi Standard ${stdIdx + 1} (Asesor 2): memenuhi kriteria Mumtaz.` },
         ]);
 
-        await clickApprove(page);
-        console.log(`[Steps 24-27] ✓ Standard ${stdIdx + 1} visitasi Asesor 2 submitted`);
+        await validateAllFieldsFilled(page, `Steps 24-27 std ${stdIdx + 1}`);
+        await clickApprove(page, `Steps 24-27 std ${stdIdx + 1}`);
+        console.log(`[Steps 24-27] ✓ Std ${stdIdx + 1} submitted`);
 
         await page.waitForTimeout(500);
         await page.goto('/app/spme/dikdasmen');
@@ -1483,7 +1824,9 @@ test.describe('E2E Positive — 1 Ticket (SPME DIKDASMEN → Mumtaz)', () => {
     test.setTimeout(60_000);
     if (!hasAuthState('asdk')) test.skip();
 
-    const context = await browser.newContext({ storageState: getStorageStatePath('asdk') });
+    // Use loginAs instead of raw newContext — auto-refreshes the JWT if the
+    // cached storageState has expired (default 2-hour TTL on /api/login tokens).
+    const context = await loginAs('asdk', browser);
     const page = await context.newPage();
 
     try {

@@ -31,18 +31,37 @@ export async function loginAs(role: RoleKey, browser: Browser): Promise<BrowserC
   const user = TEST_USERS[role];
   const stateFile = path.join(AUTH_DIR, user.authStateFile);
 
-  // Fast path: existing valid storageState
+  // Fast path: existing storageState IF the cookies still authenticate.
+  // The JWTs issued by /api/login expire after 2 hours, which is shorter than
+  // a long workflow run — without this check, late-stage tests get 401s from
+  // tokens that were valid when global-setup ran but expired by test time.
   if (fs.existsSync(stateFile)) {
     const context = await browser.newContext({ storageState: stateFile });
-    return context;
+    const isValid = await context.request
+      .get(`${API_BASE}/user/detail-me`, { failOnStatusCode: false })
+      .then((r) => r.ok())
+      .catch(() => false);
+    if (isValid) return context;
+
+    console.warn(`[loginAs] cached auth for "${role}" rejected by API (401) — refreshing`);
+    await context.close();
   }
 
-  // Slow path: fresh API login → build cookies → save state
+  // Slow path: fresh API login → build cookies → overwrite state file
   const loginResp = await axios.post(`${API_BASE}/login`, {
     email: user.email,
     password: user.password,
   });
-  const { token, refresh_token } = loginResp.data.data;
+  // API returns camelCase `refreshToken` (verified in global.setup.ts).
+  // Tolerate snake_case too in case the backend ever changes.
+  const token = loginResp.data.data.token;
+  const refresh_token = loginResp.data.data.refreshToken ?? loginResp.data.data.refresh_token;
+  if (!token || !refresh_token) {
+    throw new Error(
+      `[loginAs ${role}] /api/login response missing token or refreshToken. ` +
+      `Got keys: ${Object.keys(loginResp.data.data ?? {}).join(', ')}`,
+    );
+  }
 
   let userData: Record<string, unknown>;
   try {
