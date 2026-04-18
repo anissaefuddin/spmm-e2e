@@ -2,20 +2,20 @@
   "cookies": [
     {
       "name": "token",
-      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0dXNlcm1hQHlvcG1haWwuY29tIiwiaWF0IjoxNzc2MzE5NTgzLCJleHAiOjE3NzYzMjY3ODN9.DvFhxfVhfsq3RwMPGIcA6_CtjfgiF2To7Q99DMnRogU",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0dXNlcm1hQHlvcG1haWwuY29tIiwiaWF0IjoxNzc2NTE4OTk1LCJleHAiOjE3NzY1MjYxOTV9.zXadjcwfdp-8k8zD3Njcxf3x0FGKWHoKe_caDWQl27Y",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776405983,
+      "expires": 1776605395,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
     },
     {
       "name": "refresh_token",
-      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0dXNlcm1hQHlvcG1haWwuY29tIiwiaWF0IjoxNzc2MzE5NTgzLCJleHAiOjE3NzY0MDU5ODN9.fFTEbhV5gjxET0asGXGgeERxzhmpftKEoZbDQxAAdHM",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0dXNlcm1hQHlvcG1haWwuY29tIiwiaWF0IjoxNzc2NTE4OTk1LCJleHAiOjE3NzY2MDUzOTV9.ioDpiPPN91QEnPdBVuEzbukiGYiwshEDyEWAw1NvDLI",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776924383,
+      "expires": 1777123795,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -25,7 +25,7 @@
       "value": "{\"fullname\":\"user Mahad aly untuk testing\",\"email\":\"testuserma@yopmail.com\",\"lembaga\":\"KRAPYAK YOGYAKARTA\",\"phone_number\":null,\"roles\":[{\"role_name\":\"Ma'had Aly\",\"role_code\":\"MA\",\"role_id\":\"35f0d38c-c861-48c5-a7f4-e3c1e1ff95e6\"}],\"nomor_statistik\":null,\"lembaga_address\":null,\"student_male\":0,\"student_female\":0,\"total_staff\":0,\"profile_image_url\":null,\"certificate_url\":null,\"certificate_name\":null,\"type_lembaga\":null,\"institution_id\":\"426631\",\"user_id\":\"a983e7fc-16f1-48e2-943f-b4f802fde531\",\"first_name\":null,\"last_name\":null}",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776405983,
+      "expires": 1776605395,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -35,7 +35,7 @@
       "value": "{\"role_name\":\"Ma'had Aly\",\"role_code\":\"MA\",\"role_id\":\"35f0d38c-c861-48c5-a7f4-e3c1e1ff95e6\"}",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776405983,
+      "expires": 1776605395,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"

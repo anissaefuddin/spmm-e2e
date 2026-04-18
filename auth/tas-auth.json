@@ -2,20 +2,20 @@
   "cookies": [
     {
       "name": "token",
-      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VydGFAeW9wbWFpbC5jb20iLCJpYXQiOjE3NzYzMTk1ODMsImV4cCI6MTc3NjMyNjc4M30.IXdB1zv3bczsvQaE4aRyHNNM-A8o1ZDJkjpMjiomiUQ",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VydGFAeW9wbWFpbC5jb20iLCJpYXQiOjE3NzY1MTg5OTYsImV4cCI6MTc3NjUyNjE5Nn0.CbAhDT5_qjfzxUAq1v6F2e7ck1Lsrnkgpxw9w59WGcM",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776405983,
+      "expires": 1776605396,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
     },
     {
       "name": "refresh_token",
-      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VydGFAeW9wbWFpbC5jb20iLCJpYXQiOjE3NzYzMTk1ODMsImV4cCI6MTc3NjQwNTk4M30.mK9wFLkgoClR-yBollveWVddKRF0kYcrrYq07qcOUsw",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VydGFAeW9wbWFpbC5jb20iLCJpYXQiOjE3NzY1MTg5OTYsImV4cCI6MTc3NjYwNTM5Nn0.igyLj-jeATPHnmDW0hKFC5FfM-9oH38wmB0gj1eVKjc",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776924383,
+      "expires": 1777123796,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -25,7 +25,7 @@
       "value": "{\"fullname\":\"Alex Muhammad\",\"email\":\"userta@yopmail.com\",\"lembaga\":null,\"phone_number\":\"085641231132\",\"roles\":[{\"role_name\":\"Tenaga Ahli\",\"role_code\":\"TA\",\"role_id\":\"2d61c4c5-be66-419c-ba66-36695babb139\"}],\"nomor_statistik\":null,\"lembaga_address\":null,\"student_male\":0,\"student_female\":0,\"total_staff\":0,\"profile_image_url\":\"http://103.145.195.11:9701/majmas/profile-picture/50ca9f33-3fef-459f-bfaf-0163e28f2fcf/profile_istockphoto-1327592506-612x612.jpg?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=syamil-app%2F20241211%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20241211T044209Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=7a2543b4d8780b4d54854a3ff98c75c1f88c732317b88650b446ad7df7a537fc\",\"certificate_url\":null,\"certificate_name\":null,\"type_lembaga\":null,\"institution_id\":null,\"user_id\":\"50ca9f33-3fef-459f-bfaf-0163e28f2fcf\",\"first_name\":\"Alex\",\"last_name\":\"Muhammad\"}",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776405983,
+      "expires": 1776605396,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -35,7 +35,7 @@
       "value": "{\"role_name\":\"Tenaga Ahli\",\"role_code\":\"TA\",\"role_id\":\"2d61c4c5-be66-419c-ba66-36695babb139\"}",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776405983,
+      "expires": 1776605396,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
