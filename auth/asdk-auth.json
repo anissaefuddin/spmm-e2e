@@ -2,20 +2,20 @@
   "cookies": [
     {
       "name": "token",
-      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhc2Vzb3JkZG0xQHlvcG1haWwuY29tIiwiaWF0IjoxNzc2NTE5MjU2LCJleHAiOjE3NzY1MjY0NTZ9.xHmHLEJEXW498NDxkNOQ_rpogaAGUHv6xv_tv0bCALg",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhc2Vzb3JkZG0xQHlvcG1haWwuY29tIiwiaWF0IjoxNzc2NjM4NjIwLCJleHAiOjE3NzY2NDU4MjB9.yl2sogL-_kpelhHiL-XQvvsREc1IjFWDJNqYqaxelCw",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776605656,
+      "expires": 1776725020,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
     },
     {
       "name": "refresh_token",
-      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhc2Vzb3JkZG0xQHlvcG1haWwuY29tIiwiaWF0IjoxNzc2NTE5MjU2LCJleHAiOjE3NzY2MDU2NTZ9.QL3flCp-TKhHPEk1NyojuTV5LdonFneV-wTRbRDxjFk",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhc2Vzb3JkZG0xQHlvcG1haWwuY29tIiwiaWF0IjoxNzc2NjM4NjIwLCJleHAiOjE3NzY3MjUwMjB9.OUPftWxLoODeGi53_wqUtDBUx2VgVfePfsDb4vCDo_c",
       "domain": "localhost",
       "path": "/",
-      "expires": 1777124056,
+      "expires": 1777243420,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -25,7 +25,7 @@
       "value": "{\"fullname\":\"Asesor DDM #1\",\"email\":\"asesorddm1@yopmail.com\",\"lembaga\":null,\"phone_number\":\"081111111111\",\"roles\":[{\"role_name\":\"Asessor Dikdasmen\",\"role_code\":\"DS\",\"role_id\":\"2171067c-b3c7-47b1-8858-232c789eca2e\"}],\"nomor_statistik\":null,\"lembaga_address\":null,\"student_male\":0,\"student_female\":0,\"total_staff\":0,\"profile_image_url\":null,\"certificate_url\":null,\"certificate_name\":null,\"type_lembaga\":null,\"institution_id\":null,\"user_id\":\"392b50b4-3178-448e-a4eb-47a7754e49b7\",\"first_name\":\"Asesor\",\"last_name\":\"DDM #1\"}",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776605656,
+      "expires": 1776725020,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
@@ -35,7 +35,7 @@
       "value": "{\"role_name\":\"Asessor Dikdasmen\",\"role_code\":\"DS\",\"role_id\":\"2171067c-b3c7-47b1-8858-232c789eca2e\"}",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776605656,
+      "expires": 1776725020,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"

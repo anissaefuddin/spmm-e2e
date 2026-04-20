@@ -2,40 +2,40 @@
   "cookies": [
     {
       "name": "token",
-      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJwZW5ndXJ1c3BvbmRva3B1dHJhQGdtYWlsLmNvbSIsImlhdCI6MTc3NjUxODk5NiwiZXhwIjoxNzc2NTI2MTk2fQ.LWYRF2FSQV_f-n-UqPAlPjcag3LZDU7eWhnuJaSYpOo",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhc3Nlc29yMUB5b3BtYWlsLmNvbSIsImlhdCI6MTc3NjYzODI3MiwiZXhwIjoxNzc2NjQ1NDcyfQ.tGs5l_mbdXeWxkayQ0R1WKdBVDLOU431vCIP9EG3yCY",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776605396,
+      "expires": 1776724672,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
     },
     {
       "name": "refresh_token",
-      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJwZW5ndXJ1c3BvbmRva3B1dHJhQGdtYWlsLmNvbSIsImlhdCI6MTc3NjUxODk5NiwiZXhwIjoxNzc2NjA1Mzk2fQ.5wovi5v73HFBL1LO-Zx14fNtGk8uNuj6dUv6_4zvGg0",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhc3Nlc29yMUB5b3BtYWlsLmNvbSIsImlhdCI6MTc3NjYzODI3MiwiZXhwIjoxNzc2NzI0NjcyfQ.HvTfS6X1rHMQWJzOegyJ1mfuKiBOMGi4vDYSs_JQH_c",
       "domain": "localhost",
       "path": "/",
-      "expires": 1777123796,
+      "expires": 1777243072,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
     },
     {
       "name": "detailUser",
-      "value": "{\"fullname\":\"MOH. SAIFUL AMRI ADDAMRONI\",\"email\":\"penguruspondokputra@gmail.com\",\"lembaga\":\"Tahfidh Yanbuul Quran Putra\",\"phone_number\":\"081222557785\",\"roles\":[{\"role_name\":\"Dewan Masyayikh\",\"role_code\":\"DM\",\"role_id\":\"0871067c-b3c7-47b1-8858-293c789eca0e\"},{\"role_name\":\"Ma'had Aly\",\"role_code\":\"MA\",\"role_id\":\"35f0d38c-c861-48c5-a7f4-e3c1e1ff95e6\"}],\"nomor_statistik\":\"426898257009\",\"lembaga_address\":null,\"student_male\":0,\"student_female\":0,\"total_staff\":0,\"profile_image_url\":null,\"certificate_url\":\"http://103.168.135.187:9700/majmas/certificate/069664a6-9f3f-441a-b61a-b1ac1a1ec9f0/document_Dokumen%201.pdf?X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=FAKluWLC1wcJdPy5OQ0c%2F20250826%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20250826T142252Z&X-Amz-Expires=604800&X-Amz-SignedHeaders=host&X-Amz-Signature=18989922f7e81147da3beae6d95e1e957f1aa6595571efbdf6ef70010ef9ec1c\",\"certificate_name\":\"Dokumen 1.pdf\",\"type_lembaga\":null,\"institution_id\":\"409957\",\"user_id\":\"069664a6-9f3f-441a-b61a-b1ac1a1ec9f0\",\"first_name\":\"MOH. SAIFUL AMRI\",\"last_name\":\"ADDAMRONI\"}",
+      "value": "{\"fullname\":\"Assessor 1\",\"email\":\"assesor1@yopmail.com\",\"lembaga\":null,\"phone_number\":\"08123432345\",\"roles\":[{\"role_name\":\"Assessor Ma’had Aly\",\"role_code\":\"AS\",\"role_id\":\"c90e9778-db1c-4bd2-b6bf-953254c53a15\"}],\"nomor_statistik\":null,\"lembaga_address\":null,\"student_male\":0,\"student_female\":0,\"total_staff\":0,\"profile_image_url\":null,\"certificate_url\":null,\"certificate_name\":null,\"type_lembaga\":null,\"institution_id\":null,\"user_id\":\"375864ed-7929-4a11-b251-5922d78e4179\",\"first_name\":\"Assessor\",\"last_name\":\"1\"}",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776605396,
+      "expires": 1776724672,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"
     },
     {
       "name": "role",
-      "value": "{\"role_name\":\"Dewan Masyayikh\",\"role_code\":\"DM\",\"role_id\":\"0871067c-b3c7-47b1-8858-293c789eca0e\"}",
+      "value": "{\"role_name\":\"Assessor Ma’had Aly\",\"role_code\":\"AS\",\"role_id\":\"c90e9778-db1c-4bd2-b6bf-953254c53a15\"}",
       "domain": "localhost",
       "path": "/",
-      "expires": 1776605396,
+      "expires": 1776724672,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"

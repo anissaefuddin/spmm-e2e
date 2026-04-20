@@ -138,6 +138,14 @@ export const ROLE_ACCESS: Record<RoleKey, RoleAccess> = {
     sidebarItems: ['Beranda', 'Laporan SPM Eksternal'],
     hiddenSidebarItems: ['Akun Manajemen', 'Tanda Tangan Elektronik'],
   },
+
+  asma2: {
+    label: "Assessor Ma'had Aly",
+    allowedRoutes: ['/app/', '/app/spme/mahadaly', '/app/assessment-submission'],
+    forbiddenRoutes: ['/app/user-management', '/app/esign'],
+    sidebarItems: ['Beranda', 'Laporan SPM Eksternal'],
+    hiddenSidebarItems: ['Akun Manajemen', 'Tanda Tangan Elektronik'],
+  },
 };
 
 /**

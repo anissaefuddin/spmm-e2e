@@ -60,10 +60,19 @@ export const INSTITUTION = {
 } as const;
 
 // ── Assessor assignment data (Step 10) ────────────────────────────────────
+// IMPORTANT: Names MUST exactly match the AS users present in the SK assessor
+// dropdown.  Run the test once with logging to see the actual UI list, then
+// update these strings.
+//
+// Current mapping (Apr 2026):
+//   Asesor 1 → "Assessor 1"   (assesor1@yopmail.com) → role 'asma'
+//   Asesor 2 → "Diana Punky"  (useras@yopmail.com)   → role 'asma2'
 export const ASESOR_ASSIGNMENT = {
-  /** These must match actual AS users in the test DB */
-  Assesor_1_Label:          'Dr. Ahmad Fauzi, M.Ag.',
-  Assesor_2_Label:          'Ustadz Hasan Basri, M.A.',
+  asesor_1_name:            'Assessor 1',
+  asesor_2_name:            'Diana Punky',
+  /** Legacy aliases — kept so older spec code that imports *_Label still works */
+  Assesor_1_Label:          'Assessor 1',
+  Assesor_2_Label:          'Diana Punky',
   Jadwal_Assesment_Mulai:   '2026-04-20',
   Jadwal_Assesment_Selesai: '2026-04-25',
 } as const;

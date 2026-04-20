@@ -499,12 +499,40 @@ export class SpmeDikdasmenPage extends SubmissionPage {
       // This covers: prefix differences, trailing qualifiers, minor label rewording.
       const normalize = (s: string): string =>
         s.toLowerCase()
-          .replace(/^(ds|sk|dm|ta|mm|asdk|mha|dk|tas|asma)\s+/i, '')  // strip role prefix
+          .replace(/^(ds|sk|dm|ta|mm|asdk|mha|dk|tas|asma|as)\s+/i, '')  // strip role prefix
+          .replace(/\s+/g, ' ')
+          .trim();
+
+      // Tier-4 fuzzy normalization: strips academic / honorific titles AND
+      // punctuation so "Dr. Ahmad Fauzi, M.Ag." → "ahmad fauzi".
+      // Used as a last-resort match when the test-data label includes titles
+      // that the UI dropdown omits (or vice versa).
+      //
+      // Strips (case-insensitive, with or without trailing dot):
+      //   Honorifics: dr, prof, ir, h, hj, kh, ust, ustadz, ustadzah, drs, dra
+      //   Degrees:    s.pd, s.ag, s.kom, s.e, s.h, s.hum, s.pdi, s.psi, s.sos,
+      //               m.ag, m.pd, m.kom, m.e, m.h, m.hum, m.pdi, m.psi, m.sos,
+      //               m.a, m.sc, ma, msc, ph.d, phd, lc
+      const STRIP_TITLES_RE =
+        /\b(dr|prof|ir|h|hj|kh|ust|ustadz|ustadzah|drs|dra|s\.pd|s\.ag|s\.kom|s\.e|s\.h|s\.hum|s\.pdi|s\.psi|s\.sos|m\.ag|m\.pd|m\.kom|m\.e|m\.h|m\.hum|m\.pdi|m\.psi|m\.sos|m\.a|m\.sc|ma|msc|ph\.d|phd|lc)\.?\b/gi;
+
+      const fuzzyNormalize = (s: string): string =>
+        normalize(s)
+          .replace(STRIP_TITLES_RE, '')         // remove titles
+          .replace(/[.,;:'"()/\\#-]/g, ' ')     // strip punctuation
           .replace(/\s+/g, ' ')
           .trim();
 
       const normExpected = normalize(optionText);
+      const fuzzyExpected = fuzzyNormalize(optionText);
       console.log(`      normalized expected: "${normExpected}"`);
+      console.log(`      fuzzy expected:      "${fuzzyExpected}"`);
+      console.log(
+        `      menu items (normalized): [${optionTexts.map((t) => `"${normalize(t)}"`).join(', ')}]`,
+      );
+      console.log(
+        `      menu items (fuzzy):      [${optionTexts.map((t) => `"${fuzzyNormalize(t)}"`).join(', ')}]`,
+      );
 
       let matchedEl: (typeof optionEls)[number] | null = null;
       let matchedText = '';
@@ -544,14 +572,40 @@ export class SpmeDikdasmenPage extends SubmissionPage {
         }
       }
 
+      // Tier 4a — fuzzy exact (titles + punctuation stripped from both sides)
+      if (!matchedEl && fuzzyExpected.length > 0) {
+        for (let i = 0; i < optionEls.length; i++) {
+          if (fuzzyNormalize(optionTexts[i]) === fuzzyExpected) {
+            matchedEl = optionEls[i];
+            matchedText = optionTexts[i];
+            matchTier = 'fuzzy-exact';
+            break;
+          }
+        }
+      }
+
+      // Tier 4b — fuzzy contains (handles "Dr. Ahmad Fauzi, M.Ag." → "ahmad fauzi")
+      if (!matchedEl && fuzzyExpected.length > 0) {
+        for (let i = 0; i < optionEls.length; i++) {
+          const f = fuzzyNormalize(optionTexts[i]);
+          if (f.length === 0) continue;
+          if (f.includes(fuzzyExpected) || fuzzyExpected.includes(f)) {
+            matchedEl = optionEls[i];
+            matchedText = optionTexts[i];
+            matchTier = 'fuzzy-contains';
+            break;
+          }
+        }
+      }
+
       if (!matchedEl) {
         throw new Error(
           `[fillAssessorAssignment] group[${groupIndex}] "${labelText}": ` +
-          `no menu item matched "${optionText}" (normalized: "${normExpected}") ` +
-          `after exact, contains, and reverse-contains checks.\n` +
+          `no menu item matched "${optionText}" (normalized: "${normExpected}", fuzzy: "${fuzzyExpected}") ` +
+          `after exact, contains, reverse-contains, and fuzzy-title checks.\n` +
           `Available items: [${optionTexts.map((t) => `"${t}"`).join(', ')}]\n` +
-          `Tip: update ASSESSOR_ASSIGNMENT.asesor_${groupIndex + 1}_name in spme-dikdasmen.ts ` +
-          `to match the UI label (prefix "DS " may need to be removed).`,
+          `Tip: update ASSESSOR_ASSIGNMENT.asesor_${groupIndex + 1}_name to match a UI label exactly. ` +
+          `Titles like "Dr.", "M.Ag." are stripped automatically — use the bare name if matching by surname.`,
         );
       }
 

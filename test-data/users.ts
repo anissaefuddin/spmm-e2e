@@ -19,7 +19,8 @@ export type RoleKey =
   | 'mha'
   | 'dk'
   | 'tas'
-  | 'asma';
+  | 'asma'
+  | 'asma2';
 
 export interface TestUser {
   email: string;
@@ -146,15 +147,26 @@ export const TEST_USERS: Record<RoleKey, TestUser> = {
     envPasswordKey: 'TEST_TAS_PASSWORD',
   },
 
-  /** Assessor Ma'had Aly — SPME Mahad Aly only */
+  /** Assessor Ma'had Aly — SPME Mahad Aly only (Asesor 1 → "Assessor 1") */
   asma: {
-    email: process.env.TEST_ASMA_EMAIL || 'useras@yopmail.com',
+    email: process.env.TEST_ASMA_EMAIL || 'assesor1@yopmail.com',
     password: process.env.TEST_ASMA_PASSWORD || 'Password123!',
     role_code: 'ASMA',
     role_name: "Assessor Ma'had Aly",
     authStateFile: 'asma-auth.json',
     envEmailKey: 'TEST_ASMA_EMAIL',
     envPasswordKey: 'TEST_ASMA_PASSWORD',
+  },
+
+  /** Assessor Ma'had Aly #2 — second assessor (Asesor 2 → "Diana Punky") */
+  asma2: {
+    email: process.env.TEST_ASMA2_EMAIL || 'useras@yopmail.com',
+    password: process.env.TEST_ASMA2_PASSWORD || 'Password123!',
+    role_code: 'ASMA',
+    role_name: "Assessor Ma'had Aly",
+    authStateFile: 'asma2-auth.json',
+    envEmailKey: 'TEST_ASMA2_EMAIL',
+    envPasswordKey: 'TEST_ASMA2_PASSWORD',
   },
 } as const;
 

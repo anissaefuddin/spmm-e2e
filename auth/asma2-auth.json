@@ -1,0 +1,45 @@
+{
+  "cookies": [
+    {
+      "name": "token",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyYXNAeW9wbWFpbC5jb20iLCJpYXQiOjE3NzY2MzgyNzIsImV4cCI6MTc3NjY0NTQ3Mn0.SeJrKuWLba_wwOtdz_sjvRt-SP-fSp2sfOLwrV-qOF8",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1776724672,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "refresh_token",
+      "value": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyYXNAeW9wbWFpbC5jb20iLCJpYXQiOjE3NzY2MzgyNzIsImV4cCI6MTc3NjcyNDY3Mn0.egnwtzT5-oXAcYtesKyM82x0VXQ4EVYBNvx3S32N9tM",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1777243072,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "detailUser",
+      "value": "{\"fullname\":\"Diana Punky\",\"email\":\"useras@yopmail.com\",\"lembaga\":null,\"phone_number\":\"085641231123\",\"roles\":[{\"role_name\":\"Assessor Ma’had Aly\",\"role_code\":\"AS\",\"role_id\":\"c90e9778-db1c-4bd2-b6bf-953254c53a15\"}],\"nomor_statistik\":null,\"lembaga_address\":null,\"student_male\":0,\"student_female\":0,\"total_staff\":0,\"profile_image_url\":null,\"certificate_url\":null,\"certificate_name\":null,\"type_lembaga\":null,\"institution_id\":null,\"user_id\":\"48e7cd2e-10a5-4c63-bba7-9f5bba6d167c\",\"first_name\":\"Diana\",\"last_name\":\"Punky\"}",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1776724672,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "role",
+      "value": "{\"role_name\":\"Assessor Ma’had Aly\",\"role_code\":\"AS\",\"role_id\":\"c90e9778-db1c-4bd2-b6bf-953254c53a15\"}",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1776724672,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}

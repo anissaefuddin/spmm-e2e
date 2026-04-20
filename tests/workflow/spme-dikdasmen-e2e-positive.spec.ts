@@ -916,11 +916,73 @@ async function waitForActionButton(
  * After clicking, waits for /responsetask or /v2/responsetask. If a
  * confirmation modal appears, clicks the modal's action button too.
  */
+/**
+ * Simulate real user interaction on every form field.
+ *
+ * `.fill()` sets values but does NOT flip React Hook Form's "touched" state.
+ * Many forms only accept submission after fields are touched (focus + blur)
+ * and change events bubble up through React's synthetic event system.
+ *
+ * This helper:
+ *   1. Iterates every visible input/textarea/select
+ *   2. Focuses and blurs each (marks as touched)
+ *   3. Dispatches native `change` + `blur` events (React sees them)
+ *   4. Tabs through fields via keyboard for good measure
+ *   5. Small delay so validation can settle
+ *
+ * Call this AFTER all fills and BEFORE submitting.
+ */
+async function touchAllFields(page: Page, label: string): Promise<void> {
+  if (page.isClosed()) return;
+  console.log(`    [${label}] touchAllFields: simulating user interaction`);
+
+  try {
+    // Pass 1 — in-browser focus/blur + change/blur events on every field
+    // Runs inside page.evaluate for speed (one round-trip instead of N)
+    const counts = await page.evaluate(() => {
+      const selectors = 'input:not([type="hidden"]), textarea, select';
+      const fields = Array.from(document.querySelectorAll<HTMLElement>(selectors))
+        .filter((el) => (el as HTMLInputElement).offsetParent !== null); // visible only
+      let touched = 0;
+      for (const el of fields) {
+        try {
+          el.focus();
+          el.dispatchEvent(new Event('focus',  { bubbles: true }));
+          el.dispatchEvent(new Event('input',  { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          el.dispatchEvent(new Event('blur',   { bubbles: true }));
+          el.blur();
+          touched++;
+        } catch { /* skip bad node */ }
+      }
+      return { touched, total: fields.length };
+    }).catch(() => ({ touched: 0, total: 0 }));
+
+    console.log(`    [${label}] touched ${counts.touched}/${counts.total} visible field(s)`);
+
+    // Pass 2 — real keyboard Tab navigation (triggers Playwright's input pipeline)
+    // 5 tabs is enough for most forms without dragging the test too long
+    for (let i = 0; i < 5 && !page.isClosed(); i++) {
+      await page.keyboard.press('Tab').catch(() => null);
+      await page.waitForTimeout(50);
+    }
+
+    // Let React Hook Form validate
+    await page.waitForTimeout(600);
+  } catch (e) {
+    console.warn(`    [${label}] touchAllFields skipped: ${String(e).slice(0, 100)}`);
+  }
+}
+
 async function clickApprove(page: Page, label = 'approve'): Promise<void> {
   // Wait for UI to settle: networkidle + longer settle lets React finish
   // rendering after async actions (file upload, form validation, etc.)
   await page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => null);
   await page.waitForTimeout(800);
+
+  // Simulate real user interaction so React Hook Form's "touched" state flips
+  // and the submit handler activates. Programmatic .fill() alone is not enough.
+  await touchAllFields(page, label);
 
   // Scroll to reveal buttons that may be below the fold
   await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight)).catch(() => null);
@@ -1056,6 +1118,9 @@ async function fillPraVisitasiDetail(page: Page, label: string, filePath: string
         }
       }
     }
+
+    // Fill custom dropdowns (React Dropdown component, not native <select>)
+    await fillCustomDropdownsInContainer(page, modal, `${label}-section[${si}]`);
 
     // Upload file if present in modal
     const uploadBtnInModal = modal.getByRole('button', { name: /Upload\s*File/i }).first();
@@ -1844,6 +1909,9 @@ async function fillFormlistRow(
     if (!picked) console.warn(`      ⚠ rating select [${si}]: no valid option found`);
   }
 
+  // 1c. Fill custom dropdowns in this row (React Dropdown component)
+  await fillCustomDropdownsInContainer(page, row, 'formlist-row');
+
   // 2. Locate "Upload File" button; if absent the row is read-only or already uploaded
   const uploadBtn = row.getByRole('button', { name: /Upload\s*File/i }).first();
   if (!await uploadBtn.isVisible({ timeout: 2_000 }).catch(() => false)) {
@@ -1953,6 +2021,53 @@ async function fillAllFormlistRows(
  *
  * Asserts table row count increases after "Simpan".
  */
+/**
+ * Fill every unfilled custom-dropdown (React Dropdown component) inside `container`.
+ *
+ * The custom Select renders a <div role="button" aria-haspopup="true"> trigger.
+ * Native <select> locators do NOT match these elements — this helper handles them.
+ *
+ * Strategy: click each trigger → wait for the CSS transition (300 ms) → find the
+ * first visible <button role="menuitem"> → click it.
+ */
+async function fillCustomDropdownsInContainer(
+  page: Page,
+  container: Locator,
+  label: string,
+): Promise<void> {
+  const triggers = container.locator('div[role="button"][aria-haspopup="true"]');
+  const count = await triggers.count();
+  if (count === 0) return;
+  console.log(`    fillCustomDropdowns [${label}]: ${count} trigger(s)`);
+
+  for (let i = 0; i < count; i++) {
+    const trigger = triggers.nth(i);
+    if (!await trigger.isVisible({ timeout: 1_000 }).catch(() => false)) continue;
+
+    await trigger.click();
+    await page.waitForTimeout(350); // allow 300 ms CSS transition to complete
+
+    // Only the currently-open menu's items are visible (closed menus are display:none)
+    const allItems = container.locator('[role="menuitem"]');
+    const total = await allItems.count();
+    let filled = false;
+    for (let j = 0; j < total; j++) {
+      const item = allItems.nth(j);
+      if (!await item.isVisible({ timeout: 500 }).catch(() => false)) continue;
+      const text = (await item.textContent() ?? '').trim();
+      await item.click();
+      console.log(`      ↳ custom dropdown[${i}] [${label}] → "${text}"`);
+      await page.waitForTimeout(200);
+      filled = true;
+      break;
+    }
+    if (!filled) {
+      console.warn(`      ↳ custom dropdown[${i}] [${label}]: no visible menuitem — pressing Escape`);
+      await page.keyboard.press('Escape');
+    }
+  }
+}
+
 async function fillFormDataSection(
   page: Page,
   sectionTitle: string,
@@ -2049,6 +2164,9 @@ async function fillFormDataSection(
       console.warn(`      ⚠ select "${nm}": ALL options appear to be placeholders — cannot fill`);
     }
   }
+
+  // ── 6b. Fill custom dropdowns (React Dropdown component, not native <select>) ─
+  await fillCustomDropdownsInContainer(page, modal, sectionTitle);
 
   // ── 7. Upload Bukti Pendukung (tipe="file") ────────────────────────────────
   const uploadBtnInModal = modal.getByRole('button', { name: /Upload\s*File/i }).first();
